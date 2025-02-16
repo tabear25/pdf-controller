@@ -90,7 +90,7 @@ class PDFToolApp:
             messagebox.showwarning("⚠️ 警告", "先にPDFファイルを選択してください。")
             return
         
-        poppler_dir = r"C:\Users\str06\private_workplace\pdf-controller\Release-24.08.0-0\poppler-24.08.0\Library\bin"
+        poppler_dir = r"YOUR_PATH"
         if self.operation_mode.get() == "rotate":
             images = preview.preview_pdf(
                 self.pdf_path, mode="rotate", 
