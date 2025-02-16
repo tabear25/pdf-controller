@@ -10,6 +10,7 @@ PDFファイルに対して以下の操作を行うことができます。
 ### 1. 準備（Preparation）
 1. **PopplerのPATHを通す**
    - [こちら](https://atmarkit.itmedia.co.jp/ait/articles/1805/11/news035.html)を参考にPATHの設定を行ってください。
+   - パスを通すのは`bin`です
    - Poppler自体はこのリポジトリに2025年2月16日に入れていますが、最新版は[こちら](https://github.com/oschwartz10612/poppler-windows?tab=readme-ov-file)でもダウンロードできます。
 
 2. **PATHをコードに適応する（Set the PATH）**
