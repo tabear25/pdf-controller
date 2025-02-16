@@ -10,7 +10,7 @@ except ImportError:
 class PDFToolApp:
     def __init__(self, master):
         self.master = master
-        master.title("📄 PDF操作ツール")
+        master.title("📄 PDFコントローラー")
         master.geometry("600x450")
         
         # 選択されたPDFファイルのパス
@@ -37,9 +37,16 @@ class PDFToolApp:
         op_frame = ttk.LabelFrame(self.master, text="🔧 操作選択")
         op_frame.pack(padx=10, pady=10, fill="x")
         
-        unlock_radio = ttk.Radiobutton(op_frame, text="🔓 パスワード解除", variable=self.operation_mode, value="unlock", command=self.show_operation_frame)
+        unlock_radio = ttk.Radiobutton(
+            op_frame, text="🔓 パスワード解除", 
+            variable=self.operation_mode, value="unlock", 
+            command=self.show_operation_frame)
         unlock_radio.grid(row=0, column=0, padx=10, pady=5, sticky="w")
-        rotate_radio = ttk.Radiobutton(op_frame, text="🔄 PDF回転", variable=self.operation_mode, value="rotate", command=self.show_operation_frame)
+        
+        rotate_radio = ttk.Radiobutton(
+            op_frame, text="🔄 PDF回転", 
+            variable=self.operation_mode, value="rotate", 
+            command=self.show_operation_frame)
         rotate_radio.grid(row=0, column=1, padx=10, pady=5, sticky="w")
         
         # パスワード解除フレーム
@@ -102,13 +109,17 @@ class PDFToolApp:
             return
         
         try:
-            # pdf2imageで先頭ページを画像に変換
-            images = convert_from_path(self.pdf_path, first_page=1, last_page=1)
+            # PATHに設定されていても、明示的にpoppler_pathを指定する例
+            poppler_dir = r"C:\Users\str06\private_workplace\pdf-controller\Release-24.08.0-0\poppler-24.08.0\Library\bin"
+            images = convert_from_path(
+                self.pdf_path, 
+                first_page=1, 
+                last_page=1, 
+                poppler_path=poppler_dir
+            )
             preview_window = tk.Toplevel(self.master)
             preview_window.title("👁️ プレビュー")
-            
-            # Tkinterで画像表示するためにPhotoImageに変換
-            # ※ Pillowライブラリが必要となりますので、インストール済みであることを前提としています
+
             from PIL import ImageTk
             img = images[0]
             img.thumbnail((400, 400))
@@ -118,7 +129,7 @@ class PDFToolApp:
             label.pack(padx=10, pady=10)
         except Exception as e:
             messagebox.showerror("❌ エラー", f"プレビューの表示に失敗しました: {e}")
-    
+            
     def execute_operation(self):
         if not self.pdf_path:
             messagebox.showwarning("⚠️ 警告", "PDFファイルを選択してください。")
@@ -131,6 +142,13 @@ class PDFToolApp:
             self.rotate_pdf()
     
     def unlock_pdf(self):
+        # PyCryptodomeの存在チェック
+        try:
+            from Crypto.Cipher import AES
+        except ImportError:
+            messagebox.showerror("❌ エラー", "AESアルゴリズムのためにPyCryptodomeが必要です。pip install pycryptodome でインストールしてください。")
+            return
+        
         password = self.password_entry.get()
         if not password:
             messagebox.showwarning("⚠️ 警告", "パスワードを入力してください。")
