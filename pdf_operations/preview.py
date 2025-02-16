@@ -25,9 +25,9 @@ def preview_pdf(pdf_path, mode, rotation_direction=None, rotation_count=1, poppl
         messagebox.showerror("❌ エラー", "不正なモードです。")
         return None
     
+    ### 回転処理後のPDFをプレビューボタンを押された時に表示する機能を実装
     try:
         if mode == "rotate":
-            # 回転処理をメモリ上で実施してから画像変換
             reader = PdfReader(pdf_path)
             writer = PdfWriter()
             for page in reader.pages:

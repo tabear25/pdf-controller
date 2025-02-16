@@ -15,7 +15,7 @@ class PDFToolApp:
         self.create_widgets()
     
     def create_widgets(self):
-        # ファイル選択フレーム
+        # ファイル選択のボタン
         file_frame = ttk.LabelFrame(self.master, text="📁 PDFファイル選択")
         file_frame.pack(padx=10, pady=10, fill="x")
         
@@ -25,7 +25,7 @@ class PDFToolApp:
         select_button = ttk.Button(file_frame, text="🔍 ファイルを選択", command=self.select_file)
         select_button.pack(side="right", padx=5, pady=5)
         
-        # 操作選択フレーム
+        # 操作選択のボタン
         op_frame = ttk.LabelFrame(self.master, text="🔧 操作選択")
         op_frame.pack(padx=10, pady=10, fill="x")
         
@@ -41,14 +41,14 @@ class PDFToolApp:
             command=self.show_operation_frame)
         rotate_radio.grid(row=0, column=1, padx=10, pady=5, sticky="w")
         
-        # パスワード解除フレーム
+        # パスワード解除ボタン
         self.unlock_frame = ttk.Frame(self.master)
         self.unlock_frame.pack(padx=10, pady=5, fill="x")
         ttk.Label(self.unlock_frame, text="🔑 PDFパスワード:").pack(side="left", padx=5)
         self.password_entry = ttk.Entry(self.unlock_frame, show="*")
         self.password_entry.pack(side="left", padx=5, fill="x", expand=True)
         
-        # PDF回転フレーム
+        # PDF回転ボタン
         self.rotate_frame = ttk.Frame(self.master)
         self.rotate_frame.pack_forget()
         
@@ -62,7 +62,7 @@ class PDFToolApp:
         spin = ttk.Spinbox(self.rotate_frame, from_=1, to=10, textvariable=self.rotation_count, width=5)
         spin.grid(row=1, column=1, padx=5, pady=5, sticky="w")
         
-        if preview.convert_from_path is not None:  # preview.py が利用可能な場合
+        if preview.convert_from_path is not None:
             preview_button = ttk.Button(self.rotate_frame, text="👁️ 回転後のプレビュー表示", command=self.show_preview)
             preview_button.grid(row=2, column=0, padx=5, pady=5, sticky="w")
         
