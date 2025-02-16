@@ -13,17 +13,13 @@ class PDFToolApp:
         master.title("📄 PDFコントローラー")
         master.geometry("600x450")
         
-        # 選択されたPDFファイルのパス
         self.pdf_path = None
         
-        # 操作モード変数
         self.operation_mode = tk.StringVar(value="unlock")
         
-        # GUIパーツ作成
         self.create_widgets()
     
     def create_widgets(self):
-        # ファイル選択フレーム
         file_frame = ttk.LabelFrame(self.master, text="📁 PDFファイル選択")
         file_frame.pack(padx=10, pady=10, fill="x")
         
@@ -33,7 +29,6 @@ class PDFToolApp:
         select_button = ttk.Button(file_frame, text="🔍 ファイルを選択", command=self.select_file)
         select_button.pack(side="right", padx=5, pady=5)
         
-        # 操作選択フレーム
         op_frame = ttk.LabelFrame(self.master, text="🔧 操作選択")
         op_frame.pack(padx=10, pady=10, fill="x")
         
@@ -105,11 +100,10 @@ class PDFToolApp:
             messagebox.showwarning("⚠️ 警告", "先にPDFファイルを選択してください。")
             return
         if convert_from_path is None:
-            messagebox.showinfo("ℹ️ 情報", "pdf2imageライブラリがインストールされていません。")
+            messagebox.showinfo("情報", "pdf2imageライブラリがインストールされていません。")
             return
         
         try:
-            # PATHに設定されていても、明示的にpoppler_pathを指定する例
             poppler_dir = r"C:\Users\str06\private_workplace\pdf-controller\Release-24.08.0-0\poppler-24.08.0\Library\bin"
             images = convert_from_path(
                 self.pdf_path, 
@@ -118,14 +112,14 @@ class PDFToolApp:
                 poppler_path=poppler_dir
             )
             preview_window = tk.Toplevel(self.master)
-            preview_window.title("👁️ プレビュー")
+            preview_window.title("👁️ プレビュー(回転前の状態を表示)")
 
             from PIL import ImageTk
             img = images[0]
             img.thumbnail((400, 400))
             photo = ImageTk.PhotoImage(img)
             label = ttk.Label(preview_window, image=photo)
-            label.image = photo  # 参照保持
+            label.image = photo
             label.pack(padx=10, pady=10)
         except Exception as e:
             messagebox.showerror("❌ エラー", f"プレビューの表示に失敗しました: {e}")
@@ -142,7 +136,6 @@ class PDFToolApp:
             self.rotate_pdf()
     
     def unlock_pdf(self):
-        # PyCryptodomeの存在チェック
         try:
             from Crypto.Cipher import AES
         except ImportError:
@@ -154,9 +147,9 @@ class PDFToolApp:
             messagebox.showwarning("⚠️ 警告", "パスワードを入力してください。")
             return
         
+        ###パスワード解除
         try:
             reader = PdfReader(self.pdf_path)
-            # パスワード解除の試行
             if reader.is_encrypted:
                 if not reader.decrypt(password):
                     messagebox.showerror("❌ エラー", "パスワードが正しくありません。")
@@ -165,7 +158,6 @@ class PDFToolApp:
             for page in reader.pages:
                 writer.add_page(page)
             
-            # 出力先ファイル名（元ファイルと同じフォルダに _unlocked 付きで保存）
             base, ext = os.path.splitext(self.pdf_path)
             output_path = base + "_unlocked" + ext
             with open(output_path, "wb") as f_out:
@@ -181,14 +173,11 @@ class PDFToolApp:
             reader = PdfReader(self.pdf_path)
             writer = PdfWriter()
             for page in reader.pages:
-                # 1回の回転が90度とする
                 rotation_angle = 90 * count
                 if direction == "right":
-                    # 右回転：時計回り
-                    page.rotate_clockwise(rotation_angle)
+                    page.rotate(90 * count)
                 else:
-                    # 左回転：反時計回り
-                    page.rotate_counter_clockwise(rotation_angle)
+                    page.rotate(-90 * count)
                 writer.add_page(page)
             
             # 出力先ファイル名（元ファイルと同じフォルダに _rotated 付きで保存）
