@@ -63,7 +63,7 @@ class PDFToolApp:
         spin.grid(row=1, column=1, padx=5, pady=5, sticky="w")
         
         if preview.convert_from_path is not None:  # preview.py が利用可能な場合
-            preview_button = ttk.Button(self.rotate_frame, text="👁️ プレビュー表示", command=self.show_preview)
+            preview_button = ttk.Button(self.rotate_frame, text="👁️ 回転後のプレビュー表示", command=self.show_preview)
             preview_button.grid(row=2, column=0, padx=5, pady=5, sticky="w")
         
         execute_button = ttk.Button(self.master, text="✅ 確定", command=self.execute_operation)
