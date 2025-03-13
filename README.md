@@ -14,7 +14,7 @@ PDFファイルに対して以下の操作を行うことができます。
    - Poppler自体はこのリポジトリに2025年2月16日に入れていますが、最新版は[こちら](https://github.com/oschwartz10612/poppler-windows?tab=readme-ov-file)でもダウンロードできます。
 
 2. **PATHをコードに適応する（Set the PATH）**
-   - gui.pyの以下の部分に1で通したPATHを指示してください
+   - gui.pyの以下の`YOUR_PATH`に1で通したPATHを指示してください（93行目）
    ```
    poppler_dir = r"YOUR_PATH"
    ```
