@@ -1,3 +1,4 @@
+# pattern1
 import os
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
@@ -103,3 +104,114 @@ class PDFToolApp(ctk.CTk):
 if __name__ == "__main__":
     app = PDFToolApp()
     app.mainloop()
+
+#pattern2
+import os
+import customtkinter as ctk
+from tkinter import filedialog, messagebox
+from pdf_operations import unlock, rotate, preview
+
+class PDFToolApp:
+    def __init__(self, master):
+        self.master = master
+        self.master.title("PDFコントローラー")
+        self.master.geometry("600x450")
+        ctk.set_appearance_mode("dark")  # ダークテーマ設定
+        ctk.set_default_color_theme("blue")  # カラーテーマ設定
+        
+        self.pdf_path = None
+        self.operation_mode = ctk.StringVar(value="unlock")
+        
+        self.create_widgets()
+    
+    def create_widgets(self):
+        # ファイル選択のボタン
+        file_frame = ctk.CTkFrame(self.master)
+        file_frame.pack(padx=10, pady=10, fill="x")
+        
+        self.file_label = ctk.CTkLabel(file_frame, text="📄 ファイル未選択", anchor="w")
+        self.file_label.pack(side="left", padx=5, pady=5, expand=True, fill="x")
+        
+        select_button = ctk.CTkButton(file_frame, text="🔍 ファイルを選択", command=self.select_file)
+        select_button.pack(side="right", padx=5, pady=5)
+        
+        # 操作選択のボタン
+        op_frame = ctk.CTkFrame(self.master)
+        op_frame.pack(padx=10, pady=10, fill="x")
+        
+        unlock_radio = ctk.CTkRadioButton(
+            op_frame, text="🔓 パスワード解除", 
+            variable=self.operation_mode, value="unlock", 
+            command=self.show_operation_frame)
+        unlock_radio.grid(row=0, column=0, padx=10, pady=5)
+        
+        rotate_radio = ctk.CTkRadioButton(
+            op_frame, text="🔄 PDF回転", 
+            variable=self.operation_mode, value="rotate", 
+            command=self.show_operation_frame)
+        rotate_radio.grid(row=0, column=1, padx=10, pady=5)
+        
+        # パスワード解除ボタン
+        self.unlock_frame = ctk.CTkFrame(self.master)
+        self.unlock_frame.pack(padx=10, pady=5, fill="x")
+        
+        ctk.CTkLabel(self.unlock_frame, text="🔑 PDFパスワード:").pack(side="left", padx=5)
+        self.password_entry = ctk.CTkEntry(self.unlock_frame, show="*")
+        self.password_entry.pack(side="left", padx=5, fill="x", expand=True)
+        
+        # PDF回転ボタン
+        self.rotate_frame = ctk.CTkFrame(self.master)
+        self.rotate_frame.pack_forget()
+        
+        ctk.CTkLabel(self.rotate_frame, text="↪️ 回転方向:").grid(row=0, column=0, padx=5, pady=5)
+        self.direction = ctk.StringVar(value="right")
+        
+        ctk.CTkRadioButton(self.rotate_frame, text="➡️ 右回転", variable=self.direction, value="right").grid(row=0, column=1)
+        ctk.CTkRadioButton(self.rotate_frame, text="⬅️ 左回転", variable=self.direction, value="left").grid(row=0, column=2)
+        
+        ctk.CTkLabel(self.rotate_frame, text="🔢 回転回数 (90度単位):").grid(row=1, column=0)
+        self.rotation_count = ctk.IntVar(value=1)
+        
+        spin = ctk.CTkEntry(self.rotate_frame, textvariable=self.rotation_count)
+        spin.grid(row=1, column=1)
+
+        execute_button = ctk.CTkButton(self.master, text="✅ 確定", command=self.execute_operation)
+        execute_button.pack(pady=20)
+
+    def select_file(self):
+        filetypes = [("PDF Files", "*.pdf")]
+        filepath = filedialog.askopenfilename(title="PDFファイルを選択", filetypes=filetypes)
+        
+        if filepath:
+            self.pdf_path = filepath
+            self.file_label.configure(text=f"📄 {os.path.basename(filepath)}")
+    
+    def show_operation_frame(self):
+        mode = self.operation_mode.get()
+        
+        if mode == "unlock":
+            self.rotate_frame.pack_forget()
+            self.unlock_frame.pack(padx=10, pady=5)
+            
+        elif mode == "rotate":
+            self.unlock_frame.pack_forget()
+            self.rotate_frame.pack(padx=10, pady=5)
+
+    def execute_operation(self):
+        if not self.pdf_path:
+            messagebox.showwarning("⚠️ 警告", "PDFファイルを選択してください。")
+            return
+        
+        mode = self.operation_mode.get()
+        
+        if mode == "unlock":
+            unlock.unlock_pdf(self.pdf_path, self.password_entry.get())
+            
+        elif mode == "rotate":
+            rotate.rotate_pdf(self.pdf_path, self.direction.get(), int(self.rotation_count.get()))
+
+if __name__ == "__main__":
+    root = ctk.CTk()
+    app = PDFToolApp(root)
+    root.mainloop()
+
