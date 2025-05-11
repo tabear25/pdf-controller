@@ -1,7 +1,7 @@
 import os
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
-from pdf_operations import unlock, rotate, preview
+from pdf_operations import unlock, rotate, preview, delete_pages
 
 class PDFToolApp:
     def __init__(self, master):
@@ -40,6 +40,12 @@ class PDFToolApp:
             variable=self.operation_mode, value="rotate", 
             command=self.show_operation_frame)
         rotate_radio.grid(row=0, column=1, padx=10, pady=5, sticky="w")
+
+        ttk.Radiobutton(
+            op_frame, text="📄 PDFページ削除",
+            variable=self.operation_mode, value="delete",
+            command=self.show_operation_frame
+        ).grid(row=0, column=2, padx=10, pady=5, sticky="w")
         
         # パスワード解除ボタン
         self.unlock_frame = ttk.Frame(self.master)
@@ -62,6 +68,13 @@ class PDFToolApp:
         spin = ttk.Spinbox(self.rotate_frame, from_=1, to=10, textvariable=self.rotation_count, width=5)
         spin.grid(row=1, column=1, padx=5, pady=5, sticky="w")
         
+        #PDFページ削除ボタン
+        self.delete_frame = ttk.Frame(self.master)
+        self.delete_frame.pack_forget()
+        ttk.Label(self.delete_frame, text="削除するページ番号 (カンマ区切り):").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        self.delete_entry = ttk.Entry(self.delete_frame)
+        self.delete_entry.grid(row=0, column=1, padx=5, pady=5, sticky="w")
+
         if preview.convert_from_path is not None:
             preview_button = ttk.Button(self.rotate_frame, text="👁️ 回転後のプレビュー表示", command=self.show_preview)
             preview_button.grid(row=2, column=0, padx=5, pady=5, sticky="w")
@@ -78,12 +91,15 @@ class PDFToolApp:
     
     def show_operation_frame(self):
         mode = self.operation_mode.get()
+        self.unlock_frame.pack_forget()
+        self.rotate_frame.pack_forget()
+        self.delete_frame.pack_forget()
         if mode == "unlock":
-            self.rotate_frame.pack_forget()
             self.unlock_frame.pack(padx=10, pady=5, fill="x")
         elif mode == "rotate":
-            self.unlock_frame.pack_forget()
             self.rotate_frame.pack(padx=10, pady=5, fill="x")
+        elif mode == "delete":
+            self.delete_frame.pack(padx=10, pady=5, fill="x")
     
     def show_preview(self):
         if not self.pdf_path:
@@ -116,12 +132,15 @@ class PDFToolApp:
         if not self.pdf_path:
             messagebox.showwarning("⚠️ 警告", "PDFファイルを選択してください。")
             return
-        
+
         mode = self.operation_mode.get()
         if mode == "unlock":
             unlock.unlock_pdf(self.pdf_path, self.password_entry.get())
         elif mode == "rotate":
             rotate.rotate_pdf(self.pdf_path, self.direction.get(), self.rotation_count.get())
+        elif mode == "delete":
+            pages = [int(p.strip()) for p in self.delete_entry.get().split(",") if p.strip().isdigit()]
+            delete_pages.delete_pages(self.pdf_path, pages)
 
 if __name__ == "__main__":
     root = tk.Tk()
