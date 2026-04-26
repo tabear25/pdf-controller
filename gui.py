@@ -1,13 +1,14 @@
 import os
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
-from pdf_operations import unlock, rotate, preview
+from pdf_operations import unlock, rotate, preview, page_edit
+from PyPDF2 import PdfReader
 
 class PDFToolApp:
     def __init__(self, master):
         self.master = master
         master.title("PDFコントローラー")
-        master.geometry("600x450")
+        master.geometry("600x500")
         
         self.pdf_path = None
         self.operation_mode = tk.StringVar(value="unlock")
@@ -36,10 +37,16 @@ class PDFToolApp:
         unlock_radio.grid(row=0, column=0, padx=10, pady=5, sticky="w")
         
         rotate_radio = ttk.Radiobutton(
-            op_frame, text="🔄 PDF回転", 
-            variable=self.operation_mode, value="rotate", 
+            op_frame, text="🔄 PDF回転",
+            variable=self.operation_mode, value="rotate",
             command=self.show_operation_frame)
         rotate_radio.grid(row=0, column=1, padx=10, pady=5, sticky="w")
+
+        page_edit_radio = ttk.Radiobutton(
+            op_frame, text="✂️ ページ編集",
+            variable=self.operation_mode, value="page_edit",
+            command=self.show_operation_frame)
+        page_edit_radio.grid(row=0, column=2, padx=10, pady=5, sticky="w")
         
         # パスワード解除ボタン
         self.unlock_frame = ttk.Frame(self.master)
@@ -65,7 +72,28 @@ class PDFToolApp:
         if preview.convert_from_path is not None:
             preview_button = ttk.Button(self.rotate_frame, text="👁️ 回転後のプレビュー表示", command=self.show_preview)
             preview_button.grid(row=2, column=0, padx=5, pady=5, sticky="w")
-        
+
+        # ページ編集ボタン
+        self.page_edit_frame = ttk.Frame(self.master)
+        self.page_edit_frame.pack_forget()
+
+        ttk.Label(
+            self.page_edit_frame,
+            text="🗑️ 削除するページ番号 (例: 5  /  1,3  /  2-4):",
+        ).grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        self.delete_pages_entry = ttk.Entry(self.page_edit_frame, width=30)
+        self.delete_pages_entry.grid(row=0, column=1, padx=5, pady=5, sticky="we")
+
+        self.page_count_label = ttk.Label(self.page_edit_frame, text="📄 総ページ数: -")
+        self.page_count_label.grid(row=1, column=0, padx=5, pady=5, sticky="w")
+
+        check_button = ttk.Button(
+            self.page_edit_frame,
+            text="🔢 ページ数を確認",
+            command=self.update_page_count,
+        )
+        check_button.grid(row=1, column=1, padx=5, pady=5, sticky="w")
+
         execute_button = ttk.Button(self.master, text="✅ 確定", command=self.execute_operation)
         execute_button.pack(pady=20)
     
@@ -75,15 +103,30 @@ class PDFToolApp:
         if filepath:
             self.pdf_path = filepath
             self.file_label.config(text="📄 " + os.path.basename(filepath))
-    
+            self.page_count_label.config(text="📄 総ページ数: -")
+
     def show_operation_frame(self):
         mode = self.operation_mode.get()
+        self.unlock_frame.pack_forget()
+        self.rotate_frame.pack_forget()
+        self.page_edit_frame.pack_forget()
         if mode == "unlock":
-            self.rotate_frame.pack_forget()
             self.unlock_frame.pack(padx=10, pady=5, fill="x")
         elif mode == "rotate":
-            self.unlock_frame.pack_forget()
             self.rotate_frame.pack(padx=10, pady=5, fill="x")
+        elif mode == "page_edit":
+            self.page_edit_frame.pack(padx=10, pady=5, fill="x")
+
+    def update_page_count(self):
+        if not self.pdf_path:
+            messagebox.showwarning("⚠️ 警告", "先にPDFファイルを選択してください。")
+            return
+        try:
+            reader = PdfReader(self.pdf_path)
+            total = len(reader.pages)
+            self.page_count_label.config(text=f"📄 総ページ数: {total}")
+        except Exception as e:
+            messagebox.showerror("❌ エラー", f"ページ数の取得に失敗しました: {e}")
     
     def show_preview(self):
         if not self.pdf_path:
@@ -122,6 +165,12 @@ class PDFToolApp:
             unlock.unlock_pdf(self.pdf_path, self.password_entry.get())
         elif mode == "rotate":
             rotate.rotate_pdf(self.pdf_path, self.direction.get(), self.rotation_count.get())
+        elif mode == "page_edit":
+            spec = self.delete_pages_entry.get()
+            if not spec.strip():
+                messagebox.showwarning("⚠️ 警告", "削除するページ番号を入力してください。")
+                return
+            page_edit.edit_pdf_pages(self.pdf_path, spec)
 
 if __name__ == "__main__":
     root = tk.Tk()
