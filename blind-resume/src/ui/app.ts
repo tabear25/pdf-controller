@@ -310,7 +310,7 @@ export class App {
     this.layer.cancelInteraction();
     const includedPages = current.pdf.pages.map((p) => p.index).filter((i) => !this.store.isExcluded(i));
     if (includedPages.length === 0) {
-      this.showMessage("error", "書き出すページがありません。少なくとも 1 ページは「書き出す」にしてください。");
+      this.showMessage("error", "書き出すページがありません。少なくとも 1 ページは「このページを書き出す」にチェックを入れてください。");
       return;
     }
     const pending = this.store.pendingCandidates.filter((c) => includedPages.includes(c.page));
