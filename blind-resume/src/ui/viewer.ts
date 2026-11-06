@@ -8,6 +8,7 @@ import {
 } from "../config/app";
 import type { PageModel } from "../pdf/document";
 import { RENDER_SETTINGS } from "../pdf/settings";
+import { freeCanvas } from "../pdf/canvas";
 import { h } from "./dom";
 
 type RenderState = "pending" | "rendering" | "rendered" | "error";
@@ -27,12 +28,6 @@ interface PageSlot extends PageView {
 }
 
 export type FitMode = "width" | "manual";
-
-export function freeCanvas(canvas: HTMLCanvasElement): void {
-  canvas.width = 0;
-  canvas.height = 0;
-  canvas.remove();
-}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));

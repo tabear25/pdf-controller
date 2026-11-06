@@ -1,8 +1,10 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
+const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 
 export const BUNDLED_PACKAGES = [
   { name: "pdfjs-dist", licenseFiles: ["LICENSE"] },
@@ -23,7 +25,13 @@ export const BUNDLED_DATA = [
 ];
 
 export function packageRoot(name) {
-  return dirname(require.resolve(`${name}/package.json`));
+  try {
+    return dirname(require.resolve(`${name}/package.json`));
+  } catch {
+    const fallback = join(projectRoot, "node_modules", name);
+    if (existsSync(join(fallback, "package.json"))) return fallback;
+    throw new Error(`パッケージ ${name} の場所が分かりません。`);
+  }
 }
 
 function packageInfo(name) {

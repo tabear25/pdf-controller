@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { chromium } from "playwright";
@@ -35,7 +35,48 @@ async function drag(page, pageIndex, from, to) {
   await page.mouse.up();
 }
 
+const manifest = JSON.parse(readFileSync(resolve("tests/fixtures/manifest.json"), "utf8"));
+
+async function redactTargets(page, name, ids) {
+  const info = manifest.fixtures[name];
+  for (let i = 0; i < info.pages.length; i++) {
+    const p = info.pages[i];
+    const top = p.cropBox[3];
+    for (const t of p.targets) {
+      if (!ids.some((id) => t.id.includes(id))) continue;
+      const [x0, y0, x1, y1] = t.bbox;
+      await drag(page, i, [x0 - p.cropBox[0] - 2, top - y1 - 2], [x1 - p.cropBox[0] + 2, top - y0 + 2]);
+    }
+  }
+}
+
+async function exportReview(page) {
+  await page.getByTestId("export").click();
+  await page.getByTestId("export-start").click();
+  await page.getByTestId("review").waitFor({ timeout: 120000 });
+  await page.locator('.preview-row[data-rendered="true"]').first().waitFor();
+  await page.getByTestId("confirm").check();
+}
+
 const scenes = {
+  m3: [
+    {
+      file: "m3-01-review.png",
+      run: async (page) => {
+        await openFixture(page, "01_embedded_resume.pdf");
+        await redactTargets(page, "01_embedded_resume.pdf", ["header-name", "footer-name", "p1-kana", "p1-name", "p1-birth", "p1-gender", "p1-address", "p1-station", "p1-phone", "p1-email", "p1-url", "p1-photo"]);
+        await exportReview(page);
+      },
+    },
+    {
+      file: "m3-02-review-scan.png",
+      run: async (page) => {
+        await openFixture(page, "07_scan_image_only.pdf");
+        await redactTargets(page, "07_scan_image_only.pdf", ["scan-header", "scan-name", "scan-phone", "scan-email", "scan-address", "scan-photo"]);
+        await exportReview(page);
+      },
+    },
+  ],
   m2: [
     {
       file: "m2-01-rect-editing.png",

@@ -8,7 +8,9 @@ import { moveWithin } from "../core/geometry";
 import { formatPageList } from "../core/redactions";
 import { openPdf, PasswordCancelledError, type OpenedPdf } from "../pdf/document";
 import { missingBrowserFeatures } from "../pdf/support";
+import { collectInfoValues, ExportCancelledError, runExport } from "../export/pipeline";
 import { askPasswordDialog, createDialog } from "./dialogs";
+import { askExportSettings, ProgressDialog, ReviewDialog } from "./export-flow";
 import { h, setText } from "./dom";
 import { RedactionLayer } from "./redaction-layer";
 import { Viewer } from "./viewer";
@@ -44,6 +46,7 @@ export class App {
   private readonly clearButton: HTMLButtonElement;
   private readonly undoButton: HTMLButtonElement;
   private readonly redoButton: HTMLButtonElement;
+  private readonly exportButton: HTMLButtonElement;
   private readonly fileInfo: HTMLElement;
   private readonly messageEl: HTMLElement;
   private readonly messageText: HTMLElement;
@@ -54,6 +57,7 @@ export class App {
   private readonly selectionText: HTMLElement;
   private current: CurrentDocument | null = null;
   private loadSeq = 0;
+  private exporting = false;
 
   constructor(private readonly root: HTMLElement) {
     this.fileInput = h("input", {
@@ -71,6 +75,11 @@ export class App {
       className: "button",
       text: "↷ やり直す",
       attrs: { type: "button", disabled: "", title: "やり直す（Ctrl+Y、Ctrl+Shift+Z、⌘⇧Z）", "data-testid": "redo" },
+    });
+    this.exportButton = h("button", {
+      className: "button primary",
+      text: "⬇ 書き出す",
+      attrs: { type: "button", disabled: "", "data-testid": "export" },
     });
     this.fileInfo = h("span", { className: "file-info", attrs: { "data-testid": "file-info" } });
     this.statusEl = h("span", { className: "status", attrs: { role: "status", "aria-live": "polite" } });
@@ -114,6 +123,7 @@ export class App {
       this.fileInfo,
       h("span", { className: "spacer" }),
       this.statusEl,
+      this.exportButton,
     );
     const side = h(
       "aside",
@@ -150,6 +160,7 @@ export class App {
       if (file) void this.openFile(file);
     });
     this.clearButton.addEventListener("click", () => void this.clearAll());
+    this.exportButton.addEventListener("click", () => void this.startExport());
     this.undoButton.addEventListener("click", () => this.store.undo());
     this.redoButton.addEventListener("click", () => this.store.redo());
     applyAll.addEventListener("click", () => {
@@ -247,6 +258,50 @@ export class App {
     this.showMessage(result.skipped.length > 0 ? "warning" : "info", parts.join(""));
   }
 
+  private async startExport(): Promise<void> {
+    const current = this.current;
+    if (!current || this.exporting) return;
+    this.layer.cancelInteraction();
+    const settings = await askExportSettings(this.root, this.store.redactions.length);
+    if (!settings || this.current !== current) return;
+    this.exporting = true;
+    this.updateFileInfo();
+    this.hideMessage();
+    const controller = new AbortController();
+    const progress = new ProgressDialog(this.root, () => controller.abort());
+    try {
+      const originalInfoValues = await collectInfoValues(current.pdf);
+      const includedPages = current.pdf.pages.map((p) => p.index);
+      const result = await runExport(
+        current.pdf,
+        { dpi: settings.dpi, includedPages, redactions: this.store.redactions, originalInfoValues },
+        (p) => progress.update(p),
+        controller.signal,
+      );
+      progress.close();
+      new ReviewDialog({
+        host: this.root,
+        source: current.pdf,
+        result,
+        requestedDpi: settings.dpi,
+        onClosed: () => {
+          this.exporting = false;
+          this.updateFileInfo();
+        },
+      });
+    } catch (error) {
+      progress.close();
+      this.exporting = false;
+      this.updateFileInfo();
+      if (error instanceof ExportCancelledError) {
+        this.showMessage("info", "書き出しを中止しました。");
+      } else {
+        console.error("書き出しに失敗しました", error);
+        this.showMessage("error", `書き出しに失敗しました。${error instanceof Error ? error.message : ""}`);
+      }
+    }
+  }
+
   private updateEditorUi(): void {
     this.undoButton.disabled = !this.store.canUndo;
     this.redoButton.disabled = !this.store.canRedo;
@@ -312,7 +367,8 @@ export class App {
 
   private updateFileInfo(): void {
     const current = this.current;
-    this.clearButton.disabled = current === null;
+    this.clearButton.disabled = current === null || this.exporting;
+    this.exportButton.disabled = current === null || this.exporting;
     setText(this.fileInfo, current ? `${current.fileName}（${current.pdf.pages.length} ページ）` : "");
     this.updateEditorUi();
   }

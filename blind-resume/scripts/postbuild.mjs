@@ -19,6 +19,7 @@ const ALLOWED_URLS = [
   { exact: "http://${e}", reason: "PDF.js が www. で始まるリンクの URL を検証するときに付ける接頭辞" },
   { exact: "http://example.com", reason: "PDF.js が URL を解析するときの仮の基準 URL" },
   { exact: "https://foo.bar", reason: "PDF.js が URL を解析するときの仮の基準 URL" },
+  { exact: "https://github.com/Hopding/pdf-lib", reason: "pdf-lib が作成ソフト名として書く文字列（updateMetadata: false にしているため、出力には書かない）" },
 ];
 
 function isAllowedUrl(url) {

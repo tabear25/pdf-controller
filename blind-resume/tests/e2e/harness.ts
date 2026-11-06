@@ -1,7 +1,8 @@
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { test as base, expect, type Page } from "@playwright/test";
-import type { FixturePage } from "./geometry";
+import { boxToDisplay, type FixturePage } from "./geometry";
 
 export interface AppOptions {
   appUrl: string;
@@ -188,5 +189,105 @@ export async function redactionData(page: Page): Promise<RectData[]> {
       const d = (el as HTMLElement).dataset;
       return { page: Number(d["page"]), x: Number(d["x"]), y: Number(d["y"]), width: Number(d["w"]), height: Number(d["h"]) };
     }),
+  );
+}
+
+export const PYTHON = process.env["PYTHON"] ?? "python3";
+
+export function independentToolsAvailable(): boolean {
+  try {
+    execFileSync(PYTHON, ["-I", "-c", "import pikepdf, pypdf, PIL"], { stdio: "ignore" });
+    execFileSync("pdftoppm", ["-v"], { stdio: "ignore" });
+    return true;
+  } catch {
+    if (process.env["REQUIRE_INDEPENDENT_CHECKS"] === "1") {
+      throw new Error("独立した検査に使う Python（pikepdf、pypdf、Pillow）か poppler が見つかりません。");
+    }
+    return false;
+  }
+}
+
+export interface IndependentReport {
+  readonly output: { forbidden: string[]; structure: string[]; jpeg_metadata: string[]; page_sizes: [number, number, number][] };
+  readonly output_text: string;
+  readonly input: { forbidden: string[]; structure: string[] };
+  readonly input_text: string;
+  readonly targets: { page: number; id: string; dark_ratio?: number; error?: string }[];
+}
+
+export function runIndependentVerifier(outputPath: string, fixtureName: string, password: string | null): IndependentReport {
+  const args = [
+    "-I",
+    resolve("tests/tools/verify_output.py"),
+    "--output",
+    outputPath,
+    "--input",
+    fixturePath(fixtureName),
+    "--manifest",
+    resolve("tests/fixtures/manifest.json"),
+    "--fixture",
+    fixtureName,
+  ];
+  if (password) args.push("--password", password);
+  const stdout = execFileSync(PYTHON, args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  return JSON.parse(stdout) as IndependentReport;
+}
+
+interface Box4 {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+function mergeOverlapping(boxes: Box4[], gap: number): Box4[] {
+  const groups = boxes.map((b) => ({ ...b }));
+  let merged = true;
+  while (merged) {
+    merged = false;
+    for (let a = 0; a < groups.length && !merged; a++) {
+      for (let b = a + 1; b < groups.length && !merged; b++) {
+        const A = groups[a]!;
+        const B = groups[b]!;
+        if (A.x0 - gap < B.x1 && B.x0 - gap < A.x1 && A.y0 - gap < B.y1 && B.y0 - gap < A.y1) {
+          groups[a] = { x0: Math.min(A.x0, B.x0), y0: Math.min(A.y0, B.y0), x1: Math.max(A.x1, B.x1), y1: Math.max(A.y1, B.y1) };
+          groups.splice(b, 1);
+          merged = true;
+        }
+      }
+    }
+  }
+  return groups;
+}
+
+export async function redactAllTargets(page: Page, info: FixtureInfo, margin = 2): Promise<number> {
+  let count = 0;
+  for (let i = 0; i < info.pages.length; i++) {
+    const fixturePage = info.pages[i]!;
+    const boxes = fixturePage.targets
+      .filter((t) => !t.id.includes("outside"))
+      .map((t) => {
+        const b = boxToDisplay(fixturePage, t.bbox);
+        return { x0: b.x - margin, y0: b.y - margin, x1: b.x + b.width + margin, y1: b.y + b.height + margin };
+      });
+    for (const g of mergeOverlapping(boxes, 2)) {
+      await dragOnPage(page, i, [g.x0, g.y0], [g.x1, g.y1]);
+      count += 1;
+    }
+  }
+  await expect(page.getByTestId("rect-count")).toHaveText(`塗る範囲：${count} 件`);
+  return count;
+}
+
+export async function exportToReview(page: Page, dpi = 200): Promise<void> {
+  await page.getByTestId("export").click();
+  await page.getByTestId(`dpi-${dpi}`).check();
+  await page.getByTestId("export-start").click();
+  await expect(page.getByTestId("review")).toBeVisible({ timeout: 120_000 });
+}
+
+export async function checkResults(page: Page): Promise<Record<string, boolean>> {
+  return page.locator('[data-testid^="check-"]').evaluateAll((els) =>
+    Object.fromEntries(els.map((el) => [(el as HTMLElement).dataset["testid"]!, (el as HTMLElement).dataset["ok"] === "true"])),
   );
 }

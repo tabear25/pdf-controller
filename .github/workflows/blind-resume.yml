@@ -48,6 +48,8 @@ jobs:
       - run: npm run test:e2e
         env:
           CI: "1"
+          PYTHON: python
+          REQUIRE_INDEPENDENT_CHECKS: "1"
       - if: failure()
         uses: actions/upload-artifact@v7
         with:
