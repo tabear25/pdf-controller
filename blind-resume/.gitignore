@@ -1,0 +1,7 @@
+node_modules/
+test-results/
+playwright-report/
+coverage/
+.venv/
+tests/fixtures/pdf/.*.tmp
+__pycache__/

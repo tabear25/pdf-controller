@@ -97,3 +97,6 @@ pdf_controller/
 
 - **依存ライブラリのエラー**
   - `pip install -r requirements.txt` で全ての依存ライブラリが正しくインストールされているか確認してください。
+
+# ブラウザ版：ブラインドレジュメ作成ツール（blind-resume/）
+PDF の黒塗りをブラウザだけで行うツールを `blind-resume/` に置いています。上の Tkinter アプリとは別のプロジェクトです。使い方と開発の方法は [blind-resume/README.md](blind-resume/README.md) を参照してください。
