@@ -96,6 +96,7 @@ test("ファイル名を変えてダウンロードでき、戻ると範囲が�
   const observed = japanese.suggestedFilename();
   testInfo.annotations.push({ type: "japanese-filename", description: observed });
   console.log(`[japanese-filename] ${testInfo.project.name}: ${observed}`);
+  if (process.platform === "win32") expect(observed).toBe("候補者A_面接用.pdf");
   await app.getByTestId("review-back").click();
   await expect(app.getByTestId("review")).toHaveCount(0);
   await expect(app.getByTestId("rect-count")).toHaveText("塗る範囲：1 件");

@@ -549,8 +549,9 @@ def fixture_09():
     rec.text(c, EMBEDDED, 16, 60, h - 100, f"氏名：{PERSONA['name']}（パスワード付き）", "name", PERSONA["name"])
     c.showPage()
     c.save()
-    with pikepdf.open(tmp) as pdf:
-        pdf.save(OUT / name, encryption=pikepdf.Encryption(user="mihon-pass", owner="mihon-owner", R=6), static_id=True)
+    if "--force-encrypted" in sys.argv or not (OUT / name).exists():
+        with pikepdf.open(tmp) as pdf:
+            pdf.save(OUT / name, encryption=pikepdf.Encryption(user="mihon-pass", owner="mihon-owner", R=6), static_id=True)
     tmp.unlink()
     record(name, "パスワード付き（AES-256）。パスワードは mihon-pass", [rec], password="mihon-pass")
 

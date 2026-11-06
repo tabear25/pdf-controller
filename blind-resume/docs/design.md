@@ -158,5 +158,5 @@ ICC プロファイル（qcms）と JavaScript の実行環境（QuickJS）は�
 ## ダミー PDF（`tests/fixtures/`）
 
 - `generate.py` で作る（reportlab、pypdf、pikepdf、Pillow、img2pdf）。必要な Python パッケージは `tests/requirements.txt`、日本語フォントは IPA ゴシック（`FIXTURE_FONT` で変更可）。
-- 生成物は `tests/fixtures/pdf/` にコミットし、テストはそれを使う。09（パスワード付き）以外は、生成し直しても同じバイト列になる。
+- 生成物は `tests/fixtures/pdf/` にコミットし、テストはそれを使う。生成し直しても同じバイト列になる。09（パスワード付き）は暗号化に乱数を使うため、すでにあれば作り直さない（`--force-encrypted` で作り直す）。
 - `manifest.json` に、各ページの MediaBox、CropBox、回転、氏名などの位置（PDF の座標）を記録する。E2E テストは、この位置をテスト側の独立した計算で画面の座標に直し、アプリの描画と照合する。

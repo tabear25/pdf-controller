@@ -45,6 +45,7 @@ export const test = base.extend<AppOptions & { guard: Guard; app: Page }>({
     context.on("request", (request) => {
       const url = request.url();
       if (url.startsWith("blob:") || url.startsWith("data:")) return;
+      if (/^(edge|chrome|about):/.test(url)) return;
       if (appOrigin === null && url === appUrl) return;
       if (appOrigin !== null && (url === `${appOrigin}/` || url === `${appOrigin}/index.html`)) return;
       externalRequests.push(url);
