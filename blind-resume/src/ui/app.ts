@@ -120,7 +120,7 @@ export class App {
     this.candidatePanel = new CandidatePanel(this.store, {
       reveal: (candidate) => {
         const first = candidate.rects[0];
-        if (first) this.viewer.scrollToArea(candidate.page, first.y);
+        if (first) this.viewer.scrollToArea(candidate.page, first.y, first.x + first.width / 2);
         this.layer.flashCandidate(candidate.id);
       },
     });

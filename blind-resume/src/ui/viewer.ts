@@ -118,11 +118,12 @@ export class Viewer {
     this.emptyEl.hidden = false;
   }
 
-  scrollToArea(pageIndex: number, y: number): void {
+  scrollToArea(pageIndex: number, y: number, x?: number): void {
     const slot = this.slots[pageIndex];
     if (!slot) return;
     const top = slot.root.offsetTop + y * this.scale - this.element.clientHeight / 3;
-    this.element.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+    const left = x === undefined ? this.element.scrollLeft : slot.root.offsetLeft + x * this.scale - this.element.clientWidth / 2;
+    this.element.scrollTo({ top: Math.max(0, top), left: Math.max(0, left), behavior: "smooth" });
   }
 
   setScale(scale: number): void {
@@ -144,9 +145,11 @@ export class Viewer {
   private setScaleInternal(scale: number): void {
     if (Math.abs(scale - this.scale) < 1e-4) return;
     const ratio = this.element.scrollHeight > 0 ? this.element.scrollTop / this.element.scrollHeight : 0;
+    const centerX = this.element.scrollWidth > 0 ? (this.element.scrollLeft + this.element.clientWidth / 2) / this.element.scrollWidth : 0.5;
     this.scale = scale;
     this.layout();
     this.element.scrollTop = ratio * this.element.scrollHeight;
+    this.element.scrollLeft = Math.max(0, centerX * this.element.scrollWidth - this.element.clientWidth / 2);
     for (const slot of this.slots) this.invalidate(slot);
     for (const slot of this.slots) if (slot.visible) void this.render(slot);
   }

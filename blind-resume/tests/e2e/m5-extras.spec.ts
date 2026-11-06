@@ -66,6 +66,27 @@ test("拡大、縮小、幅に合わせるで表示を変えても、範囲の�
   expect(await redactionData(app)).toEqual(before);
 });
 
+test("拡大してページが表示欄より広くなっても、ページの左端から右端までスクロールで届く", async ({ app }) => {
+  await openFixture(app, "01_embedded_resume.pdf");
+  await waitForAllPagesRendered(app, 2);
+  const level = app.getByTestId("zoom-level");
+  for (let i = 0; i < 6; i++) await app.getByTestId("zoom-in").click();
+  await expect(level).toHaveText("400%");
+  const edges = await app.evaluate(() => {
+    const viewer = document.querySelector<HTMLElement>(".viewer")!;
+    const page = document.querySelector<HTMLElement>('.page[data-page-index="0"]')!;
+    const visibleLeft = () => viewer.getBoundingClientRect().left + viewer.clientLeft;
+    viewer.scrollLeft = 0;
+    const atStart = page.getBoundingClientRect().left - visibleLeft();
+    viewer.scrollLeft = viewer.scrollWidth;
+    const atEnd = visibleLeft() + viewer.clientWidth - page.getBoundingClientRect().right;
+    return { atStart, atEnd, overflow: page.getBoundingClientRect().width - viewer.clientWidth };
+  });
+  expect(edges.overflow).toBeGreaterThan(0);
+  expect(edges.atStart).toBeGreaterThanOrEqual(0);
+  expect(edges.atEnd).toBeGreaterThanOrEqual(-0.5);
+});
+
 test("ページ単位で出力から外せる", async ({ app }) => {
   await openFixture(app, "01_embedded_resume.pdf");
   await waitForAllPagesRendered(app, 2);
