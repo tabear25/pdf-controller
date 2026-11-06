@@ -1,3 +1,4 @@
+import type { Candidate } from "../core/candidates";
 import type { EditorStore } from "../core/editor";
 import { clampRect, moveWithin, rectFromCorners, type Rect, type Size } from "../core/geometry";
 import { MIN_RECT_SIZE, type Redaction } from "../core/redactions";
@@ -15,6 +16,7 @@ type Interaction =
 
 export interface RedactionLayerActions {
   applyToAll(id: string): void;
+  created?(redaction: Redaction): void;
 }
 
 function fmt(value: number): string {
@@ -42,6 +44,7 @@ function resizeRect(base: Rect, handle: Handle, x: number, y: number, bounds: Si
 export class RedactionLayer {
   private interaction: Interaction | null = null;
   private readonly elements = new WeakMap<HTMLElement, Map<string, HTMLDivElement>>();
+  private readonly candidateElements = new WeakMap<HTMLElement, Map<string, HTMLDivElement>>();
   private readonly attached = new WeakSet<HTMLElement>();
 
   constructor(
@@ -151,7 +154,8 @@ export class RedactionLayer {
     if (current.kind === "create") {
       current.draft.remove();
       if (current.rect.width >= MIN_RECT_SIZE && current.rect.height >= MIN_RECT_SIZE) {
-        this.store.add(current.view.model.index, current.rect, "manual");
+        const created = this.store.add(current.view.model.index, current.rect, "manual");
+        this.actions.created?.(created);
       }
       return;
     }
@@ -173,8 +177,58 @@ export class RedactionLayer {
       list.push(r);
       byPage.set(r.page, list);
     }
+    const candidatesByPage = new Map<number, Candidate[]>();
+    for (const c of this.store.pendingCandidates) {
+      const list = candidatesByPage.get(c.page) ?? [];
+      list.push(c);
+      candidatesByPage.set(c.page, list);
+    }
     for (const view of this.viewer.pageViews) {
       this.renderPage(view, byPage.get(view.model.index) ?? []);
+      this.renderCandidates(view, candidatesByPage.get(view.model.index) ?? []);
+    }
+  }
+
+  flashCandidate(id: string): void {
+    for (const view of this.viewer.pageViews) {
+      for (const el of view.overlay.querySelectorAll<HTMLElement>(".candidate-rect")) {
+        if (el.dataset["candidateId"] !== id) continue;
+        el.classList.remove("flash");
+        void el.offsetWidth;
+        el.classList.add("flash");
+      }
+    }
+  }
+
+  private renderCandidates(view: PageView, candidates: readonly Candidate[]): void {
+    let map = this.candidateElements.get(view.overlay);
+    if (!map) {
+      map = new Map();
+      this.candidateElements.set(view.overlay, map);
+    }
+    const alive = new Set<string>();
+    for (const c of candidates) {
+      c.rects.forEach((rect, k) => {
+        const key = `${c.id}:${k}`;
+        alive.add(key);
+        let el = map.get(key);
+        if (!el) {
+          el = h("div", { className: "candidate-rect", dataset: { candidateId: c.id, page: String(c.page) }, attrs: { "aria-hidden": "true", "data-testid": "candidate-rect" } });
+          map.set(key, el);
+          view.overlay.prepend(el);
+        }
+        this.position(el, rect);
+        el.dataset["x"] = fmt(rect.x);
+        el.dataset["y"] = fmt(rect.y);
+        el.dataset["w"] = fmt(rect.width);
+        el.dataset["h"] = fmt(rect.height);
+      });
+    }
+    for (const [key, el] of map) {
+      if (!alive.has(key)) {
+        el.remove();
+        map.delete(key);
+      }
     }
   }
 

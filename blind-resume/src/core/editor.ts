@@ -1,3 +1,4 @@
+import { isCovered, type Candidate, type CandidateDraft } from "./candidates";
 import type { Rect, Size } from "./geometry";
 import { History } from "./history";
 import {
@@ -11,15 +12,26 @@ import {
 
 export interface EditorSnapshot {
   readonly redactions: readonly Redaction[];
+  readonly candidates: readonly Candidate[];
 }
 
-const EMPTY: EditorSnapshot = Object.freeze({ redactions: Object.freeze([]) as readonly Redaction[] });
+const EMPTY: EditorSnapshot = Object.freeze({
+  redactions: Object.freeze([]) as readonly Redaction[],
+  candidates: Object.freeze([]) as readonly Candidate[],
+});
+
+export interface AddCandidatesResult {
+  readonly added: number;
+  readonly duplicates: number;
+  readonly covered: number;
+}
 
 export class EditorStore {
   private readonly history = new History<EditorSnapshot>(EMPTY);
   private live: EditorSnapshot | null = null;
   private selected: string | null = null;
   private counter = 0;
+  private candidateCounter = 0;
   private pageSizes: readonly Size[] = [];
   private readonly listeners = new Set<() => void>();
 
@@ -29,6 +41,15 @@ export class EditorStore {
 
   get redactions(): readonly Redaction[] {
     return this.snapshot.redactions;
+  }
+
+  get candidates(): readonly Candidate[] {
+    return this.snapshot.candidates;
+  }
+
+  get pendingCandidates(): readonly Candidate[] {
+    const redactions = this.redactions;
+    return this.candidates.filter((c) => c.decision === "pending" && !isCovered(c, redactions));
   }
 
   get selectedId(): string | null {
@@ -61,6 +82,7 @@ export class EditorStore {
     this.live = null;
     this.selected = null;
     this.counter = 0;
+    this.candidateCounter = 0;
     this.pageSizes = pageSizes;
     this.emit();
   }
@@ -117,6 +139,43 @@ export class EditorStore {
     const result = applyToAllPages(this.redactions, id, this.pageSizes, () => this.nextId());
     if (result.added.length > 0) this.commit({ ...this.snapshot, redactions: result.redactions });
     return result;
+  }
+
+  addCandidates(drafts: readonly CandidateDraft[]): AddCandidatesResult {
+    const known = new Set(this.candidates.map((c) => c.key));
+    const fresh: Candidate[] = [];
+    let duplicates = 0;
+    let covered = 0;
+    for (const draft of drafts) {
+      if (known.has(draft.key)) {
+        duplicates += 1;
+        continue;
+      }
+      known.add(draft.key);
+      if (isCovered(draft, this.redactions)) covered += 1;
+      this.candidateCounter += 1;
+      fresh.push({ ...draft, id: `c${this.candidateCounter}`, decision: "pending" });
+    }
+    if (fresh.length > 0) this.commit({ ...this.snapshot, candidates: [...this.candidates, ...fresh] });
+    return { added: fresh.length - covered, duplicates, covered };
+  }
+
+  decide(ids: readonly string[], decision: "apply" | "skip"): number {
+    const targets = new Set(ids);
+    const added: Redaction[] = [];
+    let changed = 0;
+    const candidates = this.candidates.map((c) => {
+      if (!targets.has(c.id) || c.decision !== "pending") return c;
+      changed += 1;
+      if (decision === "apply") {
+        for (const r of c.rects) {
+          added.push({ id: this.nextId(), page: c.page, x: r.x, y: r.y, width: r.width, height: r.height, source: "candidate" });
+        }
+      }
+      return { ...c, decision };
+    });
+    if (changed > 0) this.commit({ redactions: [...this.redactions, ...added], candidates });
+    return changed;
   }
 
   undo(): boolean {

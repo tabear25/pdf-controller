@@ -1,4 +1,5 @@
 import { CHECKLIST_LEAD, CHECKS_SCOPE_NOTE, LEAK_CHECKLIST } from "../config/checklist";
+import { sourceLabel, type Candidate } from "../core/candidates";
 import { DEFAULT_DPI, DPI_OPTIONS, PREVIEW_WIDTH_PX } from "../config/export";
 import { defaultFileName, formatBytes, sanitizeFileName } from "../core/export-plan";
 import type { Rect } from "../core/geometry";
@@ -319,4 +320,40 @@ export class ReviewDialog {
     void this.options.result.verification.pdf?.close();
     this.options.onClosed();
   }
+}
+
+export function askPendingDecision(host: HTMLElement, pending: readonly Candidate[]): Promise<"apply" | "skip" | "back"> {
+  return new Promise((resolve) => {
+    const rows = pending.slice(0, 100).map((c) => h("li", { text: `${c.page + 1} ページ：${c.text}（${sourceLabel(c.source)}）` }));
+    if (pending.length > 100) rows.push(h("li", { className: "note", text: `ほかに ${pending.length - 100} 件あります。` }));
+    const back = h("button", { className: "button", text: "戻って 1 件ずつ確かめる", attrs: { type: "button", "data-testid": "pending-back" } });
+    const skip = h("button", { className: "button", text: "すべて塗らずに進む", attrs: { type: "button", "data-testid": "pending-skip" } });
+    const apply = h("button", { className: "button primary", text: "すべて塗ってから進む", attrs: { type: "button", "data-testid": "pending-apply" } });
+    const dialog = h(
+      "dialog",
+      { className: "dialog pending-dialog", attrs: { "aria-label": "未確認の候補", "data-testid": "pending-dialog" } },
+      h("h2", { className: "dialog-title", text: `未確認の候補が ${pending.length} 件あります` }),
+      h("p", { text: "書き出す前に、次の候補を塗るかどうかを決めてください。" }),
+      h("ul", { className: "pending-list" }, ...rows),
+      h("div", { className: "dialog-actions" }, back, skip, apply),
+    );
+    let settled = false;
+    const finish = (value: "apply" | "skip" | "back"): void => {
+      if (settled) return;
+      settled = true;
+      dialog.close();
+      dialog.remove();
+      resolve(value);
+    };
+    back.addEventListener("click", () => finish("back"));
+    skip.addEventListener("click", () => finish("skip"));
+    apply.addEventListener("click", () => finish("apply"));
+    dialog.addEventListener("cancel", (event) => {
+      event.preventDefault();
+      finish("back");
+    });
+    host.append(dialog);
+    dialog.showModal();
+    back.focus();
+  });
 }

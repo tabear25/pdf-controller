@@ -118,6 +118,13 @@ export class Viewer {
     this.emptyEl.hidden = false;
   }
 
+  scrollToArea(pageIndex: number, y: number): void {
+    const slot = this.slots[pageIndex];
+    if (!slot) return;
+    const top = slot.root.offsetTop + y * this.scale - this.element.clientHeight / 3;
+    this.element.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+  }
+
   setScale(scale: number): void {
     this.fit = "manual";
     this.setScaleInternal(clamp(scale, ZOOM_LIMITS.min * CSS_PX_PER_PT, ZOOM_LIMITS.max * CSS_PX_PER_PT));

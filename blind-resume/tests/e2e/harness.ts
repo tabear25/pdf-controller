@@ -291,3 +291,34 @@ export async function checkResults(page: Page): Promise<Record<string, boolean>>
     Object.fromEntries(els.map((el) => [(el as HTMLElement).dataset["testid"]!, (el as HTMLElement).dataset["ok"] === "true"])),
   );
 }
+
+export async function candidateRects(page: Page): Promise<RectData[]> {
+  return page.locator('[data-testid="candidate-rect"]').evaluateAll((els) =>
+    els.map((el) => {
+      const d = (el as HTMLElement).dataset;
+      return { page: Number(d["page"]), x: Number(d["x"]), y: Number(d["y"]), width: Number(d["w"]), height: Number(d["h"]) };
+    }),
+  );
+}
+
+export function coversBox(rects: readonly RectData[], pageIndex: number, box: { x: number; y: number; width: number; height: number }): boolean {
+  const onPage = rects.filter((r) => r.page === pageIndex);
+  for (let i = 0; i <= 8; i++) {
+    for (let j = 0; j <= 4; j++) {
+      const x = box.x + (box.width * i) / 8;
+      const y = box.y + (box.height * j) / 4;
+      if (!onPage.some((r) => x >= r.x - 0.01 && x <= r.x + r.width + 0.01 && y >= r.y - 0.01 && y <= r.y + r.height + 0.01)) return false;
+    }
+  }
+  return true;
+}
+
+export async function waitForText(page: Page): Promise<void> {
+  await expect(page.getByTestId("text-availability")).not.toContainText("読み取っています");
+}
+
+export async function search(page: Page, query: string): Promise<void> {
+  await page.getByTestId("search-input").fill(query);
+  await page.getByTestId("search-run").click();
+  await expect(page.getByTestId("search-status")).toContainText(`「${query}」は`);
+}

@@ -58,7 +58,47 @@ async function exportReview(page) {
   await page.getByTestId("confirm").check();
 }
 
+async function searchFor(page, query) {
+  await page.getByTestId("search-input").fill(query);
+  await page.getByTestId("search-run").click();
+  await page.getByTestId("search-status").filter({ hasText: query }).waitFor();
+}
+
+async function textReady(page) {
+  await page.waitForFunction(() => !document.querySelector('[data-testid="text-availability"]')?.textContent?.includes("読み取っています"));
+}
+
 const scenes = {
+  m4: [
+    {
+      file: "m4-01-candidates.png",
+      run: async (page) => {
+        await openFixture(page, "01_embedded_resume.pdf");
+        await textReady(page);
+        await redactTargets(page, "01_embedded_resume.pdf", ["header-name-p1"]);
+        await page.getByTestId("search-run").click();
+        await page.getByTestId("search-status").filter({ hasText: "見つかりました" }).waitFor();
+      },
+    },
+    {
+      file: "m4-02-spaced-names.png",
+      run: async (page) => {
+        await openFixture(page, "03_spaced_name.pdf");
+        await textReady(page);
+        for (const q of ["見本太郎", "見本花子", "みほんたろう", "ミホンガクエン"]) await searchFor(page, q);
+      },
+    },
+    {
+      file: "m4-03-pending-before-export.png",
+      run: async (page) => {
+        await openFixture(page, "02_nonembedded.pdf");
+        await textReady(page);
+        await searchFor(page, "見本");
+        await page.getByTestId("export").click();
+        await page.getByTestId("pending-dialog").waitFor();
+      },
+    },
+  ],
   m3: [
     {
       file: "m3-01-review.png",

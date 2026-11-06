@@ -6,11 +6,14 @@ import { PRIVACY_NOTE, USAGE_STEPS, USAGE_TIPS } from "../config/help";
 import { EditorStore } from "../core/editor";
 import { moveWithin } from "../core/geometry";
 import { formatPageList } from "../core/redactions";
+import { textInRect } from "../core/text-index";
 import { openPdf, PasswordCancelledError, type OpenedPdf } from "../pdf/document";
 import { missingBrowserFeatures } from "../pdf/support";
+import { buildTextIndexes, type TextIndexes } from "../pdf/text";
+import { CandidatePanel } from "./candidate-panel";
 import { collectInfoValues, ExportCancelledError, runExport } from "../export/pipeline";
 import { askPasswordDialog, createDialog } from "./dialogs";
-import { askExportSettings, ProgressDialog, ReviewDialog } from "./export-flow";
+import { askExportSettings, askPendingDecision, ProgressDialog, ReviewDialog } from "./export-flow";
 import { h, setText } from "./dom";
 import { RedactionLayer } from "./redaction-layer";
 import { Viewer } from "./viewer";
@@ -42,6 +45,8 @@ export class App {
   private readonly viewer: Viewer;
   private readonly store = new EditorStore();
   private readonly layer: RedactionLayer;
+  private readonly candidatePanel: CandidatePanel;
+  private textIndexes: TextIndexes | null = null;
   private readonly fileInput: HTMLInputElement;
   private readonly clearButton: HTMLButtonElement;
   private readonly undoButton: HTMLButtonElement;
@@ -93,7 +98,20 @@ export class App {
       h("p", { className: "empty-note", text: PRIVACY_NOTE }),
     );
     this.viewer = new Viewer(empty);
-    this.layer = new RedactionLayer(this.viewer, this.store, { applyToAll: (id) => this.applyToAll(id) });
+    this.layer = new RedactionLayer(this.viewer, this.store, {
+      applyToAll: (id) => this.applyToAll(id),
+      created: (redaction) => {
+        const index = this.textIndexes?.indexes[redaction.page];
+        if (index) this.candidatePanel.suggest(textInRect(index, redaction));
+      },
+    });
+    this.candidatePanel = new CandidatePanel(this.store, {
+      reveal: (candidate) => {
+        const first = candidate.rects[0];
+        if (first) this.viewer.scrollToArea(candidate.page, first.y);
+        this.layer.flashCandidate(candidate.id);
+      },
+    });
     this.dropOverlay = h("div", { className: "drop-overlay", attrs: { hidden: "" } }, h("p", { text: "ここに PDF をドロップ" }));
 
     const licensesDialog = createDialog("licenses", "第三者ライセンス", h("pre", { className: "license-text", text: licenseText }));
@@ -136,6 +154,7 @@ export class App {
         this.rectCount,
         this.selectionBox,
       ),
+      this.candidatePanel.element,
       h(
         "section",
         { className: "panel-section" },
@@ -262,6 +281,15 @@ export class App {
     const current = this.current;
     if (!current || this.exporting) return;
     this.layer.cancelInteraction();
+    const pending = this.store.pendingCandidates;
+    if (pending.length > 0) {
+      const choice = await askPendingDecision(this.root, pending);
+      if (choice === "back" || this.current !== current) return;
+      this.store.decide(
+        pending.map((c) => c.id),
+        choice,
+      );
+    }
     const settings = await askExportSettings(this.root, this.store.redactions.length);
     if (!settings || this.current !== current) return;
     this.exporting = true;
@@ -340,11 +368,26 @@ export class App {
       this.viewer.setPages(pdf.pages);
       this.updateFileInfo();
       this.setStatus("");
+      this.candidatePanel.setText(null, true);
+      void this.loadText(seq, pdf);
     } catch (error) {
       if (seq !== this.loadSeq) return;
       if (!(error instanceof PasswordCancelledError)) console.error("PDF を開けませんでした", error);
       this.setStatus("");
       this.showMessage("error", describeOpenError(error));
+    }
+  }
+
+  private async loadText(seq: number, pdf: OpenedPdf): Promise<void> {
+    try {
+      const result = await buildTextIndexes(pdf.pages, () => seq === this.loadSeq && this.current?.pdf === pdf);
+      if (!result) return;
+      this.textIndexes = result;
+      this.candidatePanel.setText(result, false);
+    } catch (error) {
+      if (seq !== this.loadSeq) return;
+      console.error("文字の情報を読み取れませんでした", error);
+      this.candidatePanel.setText(null, false);
     }
   }
 
@@ -359,6 +402,8 @@ export class App {
     const current = this.current;
     this.current = null;
     this.layer.cancelInteraction();
+    this.textIndexes = null;
+    this.candidatePanel.setText(null, false);
     this.store.reset([]);
     this.viewer.clear();
     this.updateFileInfo();

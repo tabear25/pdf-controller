@@ -649,3 +649,72 @@ body {
   background: #ffffff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
+
+.search-form {
+  display: flex;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.search-form .text-input {
+  flex: 1;
+}
+
+.candidate-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  max-height: 40vh;
+  overflow: auto;
+}
+
+.candidate {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--bg);
+}
+
+.candidate-text {
+  text-align: left;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.candidate-meta {
+  grid-column: 1;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.candidate-actions {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.candidate-rect {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(245, 158, 11, 0.22);
+  outline: 2px dashed rgba(217, 119, 6, 0.95);
+}
+
+.candidate-rect.flash {
+  animation: candidate-flash 1.2s ease-out 2;
+}
+
+@keyframes candidate-flash {
+  0% { background: rgba(245, 158, 11, 0.7); }
+  100% { background: rgba(245, 158, 11, 0.22); }
+}
+
+.pending-list {
+  max-height: 40vh;
+  overflow: auto;
+  padding-left: 1.2em;
+  font-size: 13px;
+}
