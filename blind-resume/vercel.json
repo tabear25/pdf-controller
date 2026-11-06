@@ -12,7 +12,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'none'; script-src 'sha256-QgHG/r4URua2z+gNDU+GRLQekz11EF4dt4ToaYLmDGA=' 'wasm-unsafe-eval'; style-src 'sha256-pem5mcLT9ZXgC4OXcYKZsvaBs5gCDtVuT8QFH25596U='; worker-src blob:; connect-src 'none'; img-src 'none'; font-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'; require-trusted-types-for 'script'; trusted-types blind-resume-worker; frame-ancestors 'none'"
+          "value": "default-src 'none'; script-src 'sha256-L8WpLHeAvglOgryY3PUhxBAD74+xLmSxIl+Op2CqI2A=' 'wasm-unsafe-eval'; style-src 'sha256-KjCeKGoFPGBKTRbjiv2oLiotJR5gM3AwhXJ5rniaKMA='; worker-src blob:; connect-src 'none'; img-src 'none'; font-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'; require-trusted-types-for 'script'; trusted-types blind-resume-worker; frame-ancestors 'none'"
         },
         {
           "key": "X-Content-Type-Options",

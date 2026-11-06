@@ -127,3 +127,66 @@ export async function darkPixelRatio(
     { pageIndex, region },
   );
 }
+
+export interface PageGeometry {
+  readonly left: number;
+  readonly top: number;
+  readonly scale: number;
+}
+
+export async function revealOnPage(page: Page, pageIndex: number, yTop: number, yBottom: number): Promise<void> {
+  await page.evaluate(
+    ({ pageIndex, yTop, yBottom }) => {
+      const el = document.querySelector<HTMLElement>(`.page[data-page-index="${pageIndex}"]`)!;
+      const viewer = document.querySelector<HTMLElement>(".viewer")!;
+      const scale = el.clientWidth / Number(el.dataset["displayWidth"]);
+      const pageRect = el.getBoundingClientRect();
+      const viewerRect = viewer.getBoundingClientRect();
+      const middle = pageRect.top + ((yTop + yBottom) / 2) * scale;
+      viewer.scrollTop += middle - (viewerRect.top + viewerRect.height / 2);
+    },
+    { pageIndex, yTop, yBottom },
+  );
+  const el = page.locator(`.page[data-page-index="${pageIndex}"]`);
+  await expect(el).toHaveAttribute("data-state", "rendered");
+}
+
+export async function pageGeometry(page: Page, pageIndex: number, scroll = true): Promise<PageGeometry> {
+  const el = page.locator(`.page[data-page-index="${pageIndex}"]`);
+  if (scroll) await el.scrollIntoViewIfNeeded();
+  await expect(el).toHaveAttribute("data-state", "rendered");
+  const box = (await el.boundingBox())!;
+  const displayWidth = Number(await el.getAttribute("data-display-width"));
+  return { left: box.x, top: box.y, scale: box.width / displayWidth };
+}
+
+export async function dragOnPage(
+  page: Page,
+  pageIndex: number,
+  from: readonly [number, number],
+  to: readonly [number, number],
+): Promise<void> {
+  await revealOnPage(page, pageIndex, Math.min(from[1], to[1]), Math.max(from[1], to[1]));
+  const g = await pageGeometry(page, pageIndex, false);
+  await page.mouse.move(g.left + from[0] * g.scale, g.top + from[1] * g.scale);
+  await page.mouse.down();
+  await page.mouse.move(g.left + to[0] * g.scale, g.top + to[1] * g.scale, { steps: 8 });
+  await page.mouse.up();
+}
+
+export interface RectData {
+  readonly page: number;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+export async function redactionData(page: Page): Promise<RectData[]> {
+  return page.locator('[data-testid="redaction"]').evaluateAll((els) =>
+    els.map((el) => {
+      const d = (el as HTMLElement).dataset;
+      return { page: Number(d["page"]), x: Number(d["x"]), y: Number(d["y"]), width: Number(d["w"]), height: Number(d["h"]) };
+    }),
+  );
+}

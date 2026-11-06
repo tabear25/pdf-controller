@@ -5,10 +5,9 @@ import {
   type PDFDocumentProxy,
   type PDFPageProxy,
 } from "pdfjs-dist";
+import { displayTransform, matricesClose, type Matrix, type ViewBox } from "../core/geometry";
 import { DOCUMENT_SETTINGS } from "./settings";
 import { createPdfWorker } from "./worker";
-
-export type ViewBox = readonly [number, number, number, number];
 
 export interface PageModel {
   readonly index: number;
@@ -18,6 +17,8 @@ export interface PageModel {
   readonly rotate: number;
   readonly view: ViewBox;
   readonly userUnit: number;
+  readonly transform: Matrix;
+  readonly transformVerified: boolean;
 }
 
 export interface OpenedPdf {
@@ -74,14 +75,23 @@ async function collectPages(doc: PDFDocumentProxy): Promise<PageModel[]> {
     const proxy = await doc.getPage(i);
     const viewport = proxy.getViewport({ scale: 1 });
     const [x0 = 0, y0 = 0, x1 = 0, y1 = 0] = proxy.view;
+    const view: ViewBox = [x0, y0, x1, y1];
+    const [a = 0, b = 0, c = 0, d = 0, e = 0, f = 0] = viewport.transform as number[];
+    const transform: Matrix = [a, b, c, d, e, f];
+    const transformVerified = matricesClose(transform, displayTransform(view, proxy.rotate, proxy.userUnit));
+    if (!transformVerified) {
+      console.error(`${i} ページの座標変換が、想定した計算と一致しません。このページでは文字の候補を表示しません。`);
+    }
     pages.push({
       index: i - 1,
       proxy,
       width: viewport.width,
       height: viewport.height,
       rotate: proxy.rotate,
-      view: [x0, y0, x1, y1],
+      view,
       userUnit: proxy.userUnit,
+      transform,
+      transformVerified,
     });
   }
   return pages;

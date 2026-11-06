@@ -2,6 +2,7 @@ name: blind-resume
 
 on:
   push:
+    branches: [main]
     paths:
       - "blind-resume/**"
       - ".github/workflows/blind-resume.yml"

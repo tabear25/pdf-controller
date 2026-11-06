@@ -13,7 +13,48 @@ async function openFixture(page, name) {
   await page.locator('.page[data-page-index="0"][data-state="rendered"]').waitFor();
 }
 
+async function drag(page, pageIndex, from, to) {
+  const el = page.locator(`.page[data-page-index="${pageIndex}"]`);
+  await page.evaluate(
+    ({ pageIndex, y }) => {
+      const pageEl = document.querySelector(`.page[data-page-index="${pageIndex}"]`);
+      const viewer = document.querySelector(".viewer");
+      const scale = pageEl.clientWidth / Number(pageEl.dataset.displayWidth);
+      const top = pageEl.getBoundingClientRect().top + y * scale;
+      const box = viewer.getBoundingClientRect();
+      viewer.scrollTop += top - (box.top + box.height / 3);
+    },
+    { pageIndex, y: Math.min(from[1], to[1]) },
+  );
+  await el.locator(".page-canvas").waitFor();
+  const box = await el.boundingBox();
+  const scale = box.width / Number(await el.getAttribute("data-display-width"));
+  await page.mouse.move(box.x + from[0] * scale, box.y + from[1] * scale);
+  await page.mouse.down();
+  await page.mouse.move(box.x + to[0] * scale, box.y + to[1] * scale, { steps: 6 });
+  await page.mouse.up();
+}
+
 const scenes = {
+  m2: [
+    {
+      file: "m2-01-rect-editing.png",
+      run: async (page) => {
+        await openFixture(page, "01_embedded_resume.pdf");
+        await drag(page, 0, [126, 16], [180, 33]);
+        await drag(page, 0, [116, 150], [205, 182]);
+      },
+    },
+    {
+      file: "m2-02-apply-all-skipped.png",
+      run: async (page) => {
+        await openFixture(page, "04_rotated_sizes.pdf");
+        await drag(page, 1, [30, 20], [150, 60]);
+        await page.getByTestId("panel-apply-all").click();
+        await page.getByTestId("message").waitFor();
+      },
+    },
+  ],
   m1: [
     { file: "m1-01-start.png", run: async () => {} },
     { file: "m1-02-embedded-resume.png", run: (page) => openFixture(page, "01_embedded_resume.pdf") },
