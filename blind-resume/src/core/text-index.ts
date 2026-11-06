@@ -30,6 +30,15 @@ interface CharRef {
   readonly item: number;
   readonly start: number;
   readonly end: number;
+  readonly slackBefore: number;
+  readonly slackAfter: number;
+}
+
+export interface CharSpan {
+  readonly start: number;
+  readonly end: number;
+  readonly slackBefore: number;
+  readonly slackAfter: number;
 }
 
 export interface PageTextIndex {
@@ -53,6 +62,46 @@ export function charWeight(ch: string): number {
   if (cp < 0x0100) return 0.55;
   if (cp < 0x2e80) return 0.8;
   return 1;
+}
+
+const NARROW_SCALE_LIMITS = Object.freeze({ min: 0.5, max: 1.5 });
+const FIXED_PITCH_NARROW_EM = 0.5;
+const FIXED_PITCH_TOLERANCE_EM = 0.001;
+const NARROW_SLACK_EM = 0.06;
+
+export function layoutItem(chars: readonly string[], emLength: number): CharSpan[] {
+  const nominal = chars.map(charWeight);
+  const narrowFlags = nominal.map((w) => w < 1);
+  const narrowCount = narrowFlags.filter(Boolean).length;
+  const wideCount = chars.length - narrowCount;
+  const narrowNominal = nominal.reduce((sum, w, k) => (narrowFlags[k] ? sum + w : sum), 0);
+  const measurable = Number.isFinite(emLength) && emLength > 0;
+  let weights = nominal;
+  let fixedPitch = false;
+  if (measurable && narrowCount > 0) {
+    const average = (emLength - wideCount) / narrowCount;
+    if (Math.abs(average - FIXED_PITCH_NARROW_EM) <= FIXED_PITCH_TOLERANCE_EM) {
+      fixedPitch = true;
+      weights = nominal.map((w, k) => (narrowFlags[k] ? FIXED_PITCH_NARROW_EM : w));
+    } else if (wideCount > 0 && narrowNominal > 0) {
+      const scale = Math.min(Math.max((emLength - wideCount) / narrowNominal, NARROW_SCALE_LIMITS.min), NARROW_SCALE_LIMITS.max);
+      weights = nominal.map((w, k) => (narrowFlags[k] ? w * scale : w));
+    }
+  }
+  const total = weights.reduce((sum, w) => sum + w, 0) || 1;
+  const slack = (before: number): number =>
+    !measurable || fixedPitch || narrowCount === 0 ? 0 : (NARROW_SLACK_EM * Math.min(before, narrowCount - before)) / emLength;
+  const spans: CharSpan[] = [];
+  let acc = 0;
+  let narrowBefore = 0;
+  chars.forEach((_, k) => {
+    const w = weights[k]!;
+    const narrowAfter = narrowBefore + (narrowFlags[k] ? 1 : 0);
+    spans.push({ start: acc / total, end: (acc + w) / total, slackBefore: slack(narrowBefore), slackAfter: slack(narrowAfter) });
+    acc += w;
+    narrowBefore = narrowAfter;
+  });
+  return spans;
 }
 
 function frameOf(item: RawTextItem, metrics: FontMetrics): ItemFrame | null {
@@ -91,15 +140,12 @@ export function buildPageIndex(
     const frame = frameOf(item, metrics);
     frames.push(frame);
     const chars = [...item.str];
-    const total = chars.reduce((sum, ch) => sum + charWeight(ch), 0) || 1;
-    let acc = 0;
-    for (const ch of chars) {
-      const w = charWeight(ch);
+    const spans = layoutItem(chars, frame ? frame.length / frame.fontSize : Number.NaN);
+    chars.forEach((ch, k) => {
       units.push(ch);
-      refs.push(frame ? { item: index, start: acc / total, end: (acc + w) / total } : null);
-      acc += w;
+      refs.push(frame ? { item: index, ...spans[k]! } : null);
       if (ch.trim().length > 0) hasText = true;
-    }
+    });
     units.push("\n");
     refs.push(null);
   });
@@ -126,13 +172,14 @@ function segmentRect(frame: ItemFrame, from: number, to: number, toDisplay: Matr
 
 export function rangeRects(index: PageTextIndex, rawStart: number, rawEnd: number, expand = true): Rect[] {
   const rects: Rect[] = [];
-  let current: { item: number; from: number; to: number } | null = null;
+  let current: { item: number; from: number; to: number; fromSlack: number; toSlack: number } | null = null;
   const flush = (): void => {
     if (!current) return;
     const frame = index.frames[current.item];
     if (frame) {
       const margin = expand ? Math.max(2, frame.fontSize * 0.2) : 0;
-      const rect = clampRect(expandRect(segmentRect(frame, current.from, current.to, index.toDisplay), margin), index.size);
+      const segment = segmentRect(frame, current.from - current.fromSlack, current.to + current.toSlack, index.toDisplay);
+      const rect = clampRect(expandRect(segment, margin), index.size);
       if (rect.width > 0.5 && rect.height > 0.5) rects.push(rect);
     }
     current = null;
@@ -146,9 +193,10 @@ export function rangeRects(index: PageTextIndex, rawStart: number, rawEnd: numbe
     if (index.units[i]!.trim().length === 0 && (!current || current.item !== ref.item)) continue;
     if (current && current.item === ref.item && Math.abs(current.to - ref.start) < 1e-9) {
       current.to = ref.end;
+      current.toSlack = ref.slackAfter;
     } else {
       flush();
-      current = { item: ref.item, from: ref.start, to: ref.end };
+      current = { item: ref.item, from: ref.start, to: ref.end, fromSlack: ref.slackBefore, toSlack: ref.slackAfter };
     }
   }
   flush();

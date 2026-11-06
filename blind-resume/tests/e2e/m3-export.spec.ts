@@ -6,6 +6,7 @@ import {
   exportToReview,
   independentToolsAvailable,
   manifest,
+  openExportSettings,
   openFixture,
   redactAllTargets,
   runIndependentVerifier,
@@ -74,7 +75,7 @@ for (const [name, info] of Object.entries(manifest.fixtures)) {
 test("塗る範囲がないまま書き出そうとすると、注意を表示する", async ({ app }) => {
   await openFixture(app, "02_nonembedded.pdf");
   await waitForAllPagesRendered(app, 1);
-  await app.getByTestId("export").click();
+  await openExportSettings(app);
   await expect(app.getByRole("dialog", { name: "書き出しの設定" })).toContainText("塗る範囲がまだありません");
   await app.getByRole("button", { name: "やめる" }).click();
   await expect(app.getByRole("dialog", { name: "書き出しの設定" })).toHaveCount(0);
@@ -117,7 +118,7 @@ test("書き出しを途中で中止できる", async ({ app }) => {
   await openFixture(app, "04_rotated_sizes.pdf");
   await waitForAllPagesRendered(app, 7);
   await dragOnPage(app, 0, [30, 20], [150, 60]);
-  await app.getByTestId("export").click();
+  await openExportSettings(app);
   await app.getByTestId("dpi-300").check();
   await app.getByTestId("export-start").click();
   await app.getByTestId("export-cancel").click();

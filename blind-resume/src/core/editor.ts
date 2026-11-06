@@ -13,11 +13,13 @@ import {
 export interface EditorSnapshot {
   readonly redactions: readonly Redaction[];
   readonly candidates: readonly Candidate[];
+  readonly excludedPages: readonly number[];
 }
 
 const EMPTY: EditorSnapshot = Object.freeze({
   redactions: Object.freeze([]) as readonly Redaction[],
   candidates: Object.freeze([]) as readonly Candidate[],
+  excludedPages: Object.freeze([]) as readonly number[],
 });
 
 export interface AddCandidatesResult {
@@ -50,6 +52,20 @@ export class EditorStore {
   get pendingCandidates(): readonly Candidate[] {
     const redactions = this.redactions;
     return this.candidates.filter((c) => c.decision === "pending" && !isCovered(c, redactions));
+  }
+
+  get excludedPages(): readonly number[] {
+    return this.snapshot.excludedPages;
+  }
+
+  isExcluded(page: number): boolean {
+    return this.snapshot.excludedPages.includes(page);
+  }
+
+  setExcluded(page: number, excluded: boolean): void {
+    if (this.isExcluded(page) === excluded) return;
+    const next = excluded ? [...this.excludedPages, page].sort((a, b) => a - b) : this.excludedPages.filter((p) => p !== page);
+    this.commit({ ...this.snapshot, excludedPages: next });
   }
 
   get selectedId(): string | null {
@@ -141,6 +157,18 @@ export class EditorStore {
     return result;
   }
 
+  get pristine(): boolean {
+    return this.live === null && !this.history.canUndo && !this.history.canRedo;
+  }
+
+  seedCandidates(drafts: readonly CandidateDraft[]): AddCandidatesResult {
+    if (!this.pristine) return this.addCandidates(drafts);
+    const result = this.addCandidates(drafts);
+    this.history.reset(this.snapshot);
+    this.emit();
+    return result;
+  }
+
   addCandidates(drafts: readonly CandidateDraft[]): AddCandidatesResult {
     const known = new Set(this.candidates.map((c) => c.key));
     const fresh: Candidate[] = [];
@@ -174,7 +202,7 @@ export class EditorStore {
       }
       return { ...c, decision };
     });
-    if (changed > 0) this.commit({ redactions: [...this.redactions, ...added], candidates });
+    if (changed > 0) this.commit({ ...this.snapshot, redactions: [...this.redactions, ...added], candidates });
     return changed;
   }
 

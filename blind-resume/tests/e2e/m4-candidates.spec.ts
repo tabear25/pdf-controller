@@ -2,6 +2,7 @@ import { boxToDisplay } from "./geometry";
 import {
   candidateRects,
   checkResults,
+  clearDetectedCandidates,
   coversBox,
   dragOnPage,
   expect,
@@ -29,7 +30,7 @@ test("範囲の中の文字が検索語に入り、文書全体の同じ氏名�
   const name = "01_embedded_resume.pdf";
   await openFixture(app, name);
   await waitForAllPagesRendered(app, 2);
-  await waitForText(app);
+  await clearDetectedCandidates(app);
   const header = targetBox(name, 0, "header-name-p1");
   await dragOnPage(app, 0, [header.x - 2, header.y - 2], [header.x + header.width + 2, header.y + header.height + 2]);
   await expect(app.getByTestId("search-input")).toHaveValue("見本 太郎");
@@ -68,7 +69,7 @@ test("均等割り付け、字間、全角空白、カタカナ・半角カナ�
   const name = "03_spaced_name.pdf";
   await openFixture(app, name);
   await waitForAllPagesRendered(app, 1);
-  await waitForText(app);
+  await clearDetectedCandidates(app);
   await search(app, "見本太郎");
   await expect(app.getByTestId("candidate")).toHaveCount(2);
   await search(app, "見本花子");
@@ -89,7 +90,7 @@ test("スキャン画像の透明なテキスト層からも候補を作る", as
   const name = "08_scan_with_text_layer.pdf";
   await openFixture(app, name);
   await waitForAllPagesRendered(app, 1);
-  await waitForText(app);
+  await clearDetectedCandidates(app);
   await search(app, "見本太郎");
   await expect(app.getByTestId("candidate")).toHaveCount(2);
   const rects = await candidateRects(app);
@@ -99,7 +100,7 @@ test("スキャン画像の透明なテキスト層からも候補を作る", as
 test("フォントを埋め込んでいない PDF でも検索できる", async ({ app }) => {
   await openFixture(app, "02_nonembedded.pdf");
   await waitForAllPagesRendered(app, 1);
-  await waitForText(app);
+  await clearDetectedCandidates(app);
   await search(app, "見本 太郎");
   await expect(app.getByTestId("candidate")).toHaveCount(1);
   const rects = await candidateRects(app);
@@ -120,7 +121,7 @@ test("文字の情報がない PDF では、検索が使えないことを表示
 test("1 件ずつ塗る・塗らないを選べ、元に戻せる。候補の位置を表示できる", async ({ app }) => {
   await openFixture(app, "02_nonembedded.pdf");
   await waitForAllPagesRendered(app, 1);
-  await waitForText(app);
+  await clearDetectedCandidates(app);
   await search(app, "見本");
   await expect(app.getByTestId("candidate")).toHaveCount(3);
   await app.locator('[data-testid="candidate"] .candidate-text').first().click();
@@ -130,7 +131,7 @@ test("1 件ずつ塗る・塗らないを選べ、元に戻せる。候補の位
   expect(await redactionData(app)).toHaveLength(1);
   await app.getByTestId("candidate-skip").first().click();
   await expect(app.getByTestId("candidate")).toHaveCount(1);
-  await expect(app.getByTestId("candidate-count")).toContainText("塗った 1 件、塗らない 1 件");
+  await expect(app.getByTestId("candidate-count")).toContainText("未確認の候補：1 件（塗った 1 件、");
   await app.locator("body").click({ position: { x: 5, y: 5 } });
   await app.keyboard.press("Control+z");
   await expect(app.getByTestId("candidate")).toHaveCount(2);
@@ -142,7 +143,7 @@ test("1 件ずつ塗る・塗らないを選べ、元に戻せる。候補の位
 test("未確認の候補が残っていると、書き出しの前に一覧を示して判断を求める", async ({ app }) => {
   await openFixture(app, "02_nonembedded.pdf");
   await waitForAllPagesRendered(app, 1);
-  await waitForText(app);
+  await clearDetectedCandidates(app);
   await search(app, "見本");
   await app.getByTestId("export").click();
   const dialog = app.getByTestId("pending-dialog");

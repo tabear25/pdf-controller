@@ -11,3 +11,5 @@ export const DISPLAY_MAX_CANVAS_PIXELS = 16_777_216;
 export const LAZY_RENDER_MARGIN_PX = 1200;
 
 export const MAX_FILE_BYTES = 300 * 1024 * 1024;
+
+export const ZOOM_STEPS: readonly number[] = [25, 50, 75, 100, 125, 150, 200, 300, 400];

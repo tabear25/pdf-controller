@@ -1,7 +1,7 @@
 import { InvalidPDFException, PasswordException } from "pdfjs-dist";
 import buildInfo from "virtual:build-info";
 import licenseText from "virtual:licenses";
-import { APP_TITLE, MAX_FILE_BYTES } from "../config/app";
+import { APP_TITLE, CSS_PX_PER_PT, MAX_FILE_BYTES, ZOOM_STEPS } from "../config/app";
 import { PRIVACY_NOTE, USAGE_STEPS, USAGE_TIPS } from "../config/help";
 import { EditorStore } from "../core/editor";
 import { moveWithin } from "../core/geometry";
@@ -11,6 +11,7 @@ import { openPdf, PasswordCancelledError, type OpenedPdf } from "../pdf/document
 import { missingBrowserFeatures } from "../pdf/support";
 import { buildTextIndexes, type TextIndexes } from "../pdf/text";
 import { CandidatePanel } from "./candidate-panel";
+import { PageControls } from "./page-controls";
 import { collectInfoValues, ExportCancelledError, runExport } from "../export/pipeline";
 import { askPasswordDialog, createDialog } from "./dialogs";
 import { askExportSettings, askPendingDecision, ProgressDialog, ReviewDialog } from "./export-flow";
@@ -52,6 +53,9 @@ export class App {
   private readonly undoButton: HTMLButtonElement;
   private readonly redoButton: HTMLButtonElement;
   private readonly exportButton: HTMLButtonElement;
+  private readonly zoomButtons: HTMLButtonElement[];
+  private readonly zoomLevel: HTMLElement;
+  private readonly usage: HTMLDetailsElement;
   private readonly fileInfo: HTMLElement;
   private readonly messageEl: HTMLElement;
   private readonly messageText: HTMLElement;
@@ -86,6 +90,14 @@ export class App {
       text: "⬇ 書き出す",
       attrs: { type: "button", disabled: "", "data-testid": "export" },
     });
+    const zoomOut = h("button", { className: "button", text: "−", attrs: { type: "button", title: "縮小", "aria-label": "縮小", "data-testid": "zoom-out" } });
+    const zoomIn = h("button", { className: "button", text: "＋", attrs: { type: "button", title: "拡大", "aria-label": "拡大", "data-testid": "zoom-in" } });
+    const zoomFit = h("button", { className: "button", text: "幅に合わせる", attrs: { type: "button", "data-testid": "zoom-fit" } });
+    this.zoomLevel = h("span", { className: "zoom-level", attrs: { "data-testid": "zoom-level", "aria-live": "polite" } });
+    this.zoomButtons = [zoomOut, zoomIn, zoomFit];
+    zoomOut.addEventListener("click", () => this.zoomStep(-1));
+    zoomIn.addEventListener("click", () => this.zoomStep(1));
+    zoomFit.addEventListener("click", () => this.viewer.fitWidth());
     this.fileInfo = h("span", { className: "file-info", attrs: { "data-testid": "file-info" } });
     this.statusEl = h("span", { className: "status", attrs: { role: "status", "aria-live": "polite" } });
     this.messageText = h("span", { className: "message-text" });
@@ -123,6 +135,13 @@ export class App {
     const deleteSelected = h("button", { className: "button small danger", text: "削除", attrs: { type: "button", "data-testid": "panel-delete" } });
     this.selectionBox = h("div", { className: "selection-box", attrs: { hidden: "" } }, this.selectionText, h("div", { className: "button-row" }, applyAll, deleteSelected));
 
+    this.usage = h(
+      "details",
+      { className: "panel-section usage-section", attrs: { open: "", "data-testid": "usage" } },
+      h("summary", { className: "panel-title", text: "使い方" }),
+      h("ol", { className: "usage" }, ...USAGE_STEPS.map((step) => h("li", { text: step }))),
+      h("ul", { className: "tips" }, ...USAGE_TIPS.map((tip) => h("li", { text: tip }))),
+    );
     const header = h(
       "header",
       { className: "app-header" },
@@ -138,6 +157,11 @@ export class App {
       h("span", { className: "separator" }),
       this.undoButton,
       this.redoButton,
+      h("span", { className: "separator" }),
+      zoomOut,
+      this.zoomLevel,
+      zoomIn,
+      zoomFit,
       this.fileInfo,
       h("span", { className: "spacer" }),
       this.statusEl,
@@ -155,13 +179,7 @@ export class App {
         this.selectionBox,
       ),
       this.candidatePanel.element,
-      h(
-        "section",
-        { className: "panel-section" },
-        h("h2", { className: "panel-title", text: "使い方" }),
-        h("ol", { className: "usage" }, ...USAGE_STEPS.map((step) => h("li", { text: step }))),
-        h("ul", { className: "tips" }, ...USAGE_TIPS.map((tip) => h("li", { text: tip }))),
-      ),
+      this.usage,
     );
     const footer = h(
       "footer",
@@ -192,6 +210,8 @@ export class App {
     });
     dismiss.addEventListener("click", () => this.hideMessage());
     licensesButton.addEventListener("click", () => licensesDialog.showModal());
+    new PageControls(this.viewer, this.store);
+    this.viewer.onLayout((scale) => setText(this.zoomLevel, `${Math.round((scale / CSS_PX_PER_PT) * 100)}%`));
     this.store.subscribe(() => this.updateEditorUi());
     this.installDropTarget();
     this.installKeyboard();
@@ -277,11 +297,23 @@ export class App {
     this.showMessage(result.skipped.length > 0 ? "warning" : "info", parts.join(""));
   }
 
+  private zoomStep(direction: 1 | -1): void {
+    const percent = (this.viewer.currentScale / CSS_PX_PER_PT) * 100;
+    const steps = direction > 0 ? ZOOM_STEPS.filter((z) => z > percent + 0.5) : ZOOM_STEPS.filter((z) => z < percent - 0.5).reverse();
+    const next = steps[0];
+    if (next !== undefined) this.viewer.setScale((next / 100) * CSS_PX_PER_PT);
+  }
+
   private async startExport(): Promise<void> {
     const current = this.current;
     if (!current || this.exporting) return;
     this.layer.cancelInteraction();
-    const pending = this.store.pendingCandidates;
+    const includedPages = current.pdf.pages.map((p) => p.index).filter((i) => !this.store.isExcluded(i));
+    if (includedPages.length === 0) {
+      this.showMessage("error", "書き出すページがありません。少なくとも 1 ページは「書き出す」にしてください。");
+      return;
+    }
+    const pending = this.store.pendingCandidates.filter((c) => includedPages.includes(c.page));
     if (pending.length > 0) {
       const choice = await askPendingDecision(this.root, pending);
       if (choice === "back" || this.current !== current) return;
@@ -299,7 +331,6 @@ export class App {
     const progress = new ProgressDialog(this.root, () => controller.abort());
     try {
       const originalInfoValues = await collectInfoValues(current.pdf);
-      const includedPages = current.pdf.pages.map((p) => p.index);
       const result = await runExport(
         current.pdf,
         { dpi: settings.dpi, includedPages, redactions: this.store.redactions, originalInfoValues },
@@ -369,6 +400,7 @@ export class App {
       this.updateFileInfo();
       this.setStatus("");
       this.candidatePanel.setText(null, true);
+      this.usage.open = false;
       void this.loadText(seq, pdf);
     } catch (error) {
       if (seq !== this.loadSeq) return;
@@ -414,6 +446,8 @@ export class App {
     const current = this.current;
     this.clearButton.disabled = current === null || this.exporting;
     this.exportButton.disabled = current === null || this.exporting;
+    for (const button of this.zoomButtons) button.disabled = current === null;
+    if (!current) setText(this.zoomLevel, "");
     setText(this.fileInfo, current ? `${current.fileName}（${current.pdf.pages.length} ページ）` : "");
     this.updateEditorUi();
   }

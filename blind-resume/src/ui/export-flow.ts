@@ -161,10 +161,11 @@ export class ReviewDialog {
           text: `⚠️ 大きいページがあるため、${reduced.map((x) => `${x.page + 1} ページを ${x.plan.dpi} dpi`).join("、")} に下げて書き出しました（ブラウザの描画の上限を超えないようにするため）。`,
         })
       : null;
+    const excludedCount = options.source.pages.length - result.includedPages.length;
     const summary = h("p", {
       className: "summary",
       attrs: { "data-testid": "output-summary" },
-      text: `${result.includedPages.length} ページ ・ ${formatBytes(result.bytes.byteLength)} ・ ${options.requestedDpi} dpi`,
+      text: `${result.includedPages.length} ページ${excludedCount > 0 ? `（${excludedCount} ページは書き出さない）` : ""} ・ ${formatBytes(result.bytes.byteLength)} ・ ${options.requestedDpi} dpi`,
     });
     const confirm = h("input", { attrs: { type: "checkbox", "data-testid": "confirm" } });
     const fileName = defaultFileName(new Date());

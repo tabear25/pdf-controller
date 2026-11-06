@@ -14,7 +14,8 @@ const unlocked = Object.entries(manifest.fixtures).filter(([, info]) => info.pas
 
 test("初期画面に使い方と送信しない旨が表示される", async ({ app, guard }) => {
   await expect(app.getByText("PDF はこの PC の外に送信されません", { exact: false }).first()).toBeVisible();
-  await expect(app.getByRole("heading", { name: "使い方" })).toBeVisible();
+  await expect(app.getByTestId("usage")).toBeVisible();
+  await expect(app.getByTestId("usage")).toContainText("使い方");
   await expect(app.getByTestId("open")).toBeEnabled();
   await expect(app.getByTestId("clear")).toBeDisabled();
   expect(guard.externalRequests).toEqual([]);

@@ -281,7 +281,7 @@ export async function redactAllTargets(page: Page, info: FixtureInfo, margin = 2
 }
 
 export async function exportToReview(page: Page, dpi = 200): Promise<void> {
-  await page.getByTestId("export").click();
+  await openExportSettings(page);
   await page.getByTestId(`dpi-${dpi}`).check();
   await page.getByTestId("export-start").click();
   await expect(page.getByTestId("review")).toBeVisible({ timeout: 120_000 });
@@ -322,4 +322,21 @@ export async function search(page: Page, query: string): Promise<void> {
   await page.getByTestId("search-input").fill(query);
   await page.getByTestId("search-run").click();
   await expect(page.getByTestId("search-status")).toContainText(`「${query}」は`);
+}
+
+export async function openExportSettings(page: Page): Promise<void> {
+  await page.getByTestId("export").click();
+  const pending = page.getByTestId("pending-dialog");
+  const settings = page.getByRole("dialog", { name: "書き出しの設定" });
+  await expect(pending.or(settings)).toBeVisible();
+  if (await pending.isVisible()) await page.getByTestId("pending-skip").click();
+  await expect(settings).toBeVisible();
+}
+
+export async function clearDetectedCandidates(page: Page): Promise<void> {
+  await waitForText(page);
+  await expect(page.getByTestId("detect-status")).not.toHaveText("");
+  const skipAll = page.getByTestId("skip-all-candidates");
+  if (await skipAll.isEnabled()) await skipAll.click();
+  await expect(page.getByTestId("candidate")).toHaveCount(0);
 }

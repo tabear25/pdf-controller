@@ -718,3 +718,68 @@ body {
   padding-left: 1.2em;
   font-size: 13px;
 }
+
+.zoom-level {
+  min-width: 3.5em;
+  text-align: center;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.pages {
+  gap: 40px;
+  padding-top: 24px;
+}
+
+.page-toggle {
+  position: absolute;
+  right: 0;
+  top: -26px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.page.excluded .page-canvas {
+  opacity: 0.35;
+}
+
+.page.excluded .page-toggle {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.page.excluded .page-overlay {
+  background: repeating-linear-gradient(45deg, rgba(180, 35, 24, 0.06) 0 12px, transparent 12px 24px);
+}
+
+.panel-subtitle {
+  margin: 10px 0 4px;
+  font-weight: 600;
+}
+
+.detectors {
+  margin: 8px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.detector-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 4px 0 8px;
+}
+
+.detector-option {
+  font-size: 13px;
+}
+
+.usage-section summary {
+  cursor: pointer;
+}

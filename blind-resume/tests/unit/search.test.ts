@@ -3,7 +3,7 @@ import { isCovered, searchDrafts } from "../../src/core/candidates";
 import { EditorStore } from "../../src/core/editor";
 import { displayTransform, type ViewBox } from "../../src/core/geometry";
 import { normalizeQuery, normalizeUnits } from "../../src/core/normalize";
-import { buildPageIndex, findAll, rangeRects, textInRect, type RawTextItem } from "../../src/core/text-index";
+import { buildPageIndex, findAll, layoutItem, rangeRects, textInRect, type RawTextItem } from "../../src/core/text-index";
 import { toDisplay } from "../e2e/geometry";
 
 const A4: ViewBox = [0, 0, 595.28, 841.89];
@@ -104,6 +104,43 @@ describe("文書の中の検索と、候補の矩形", () => {
     const [rect] = rangeRects(index, match!.rawStart, match!.rawEnd, false);
     expect(rect!.x).toBeCloseTo(80 - 50 + 3 * 14 * (11.3 / 11.3), 0);
     expect(rect!.x + rect!.width).toBeGreaterThan(80 - 50 + 6 * 14);
+  });
+
+  const CONTACT = "ご連絡は taro.mihon@example.com か、０９０－００００－５６７８ までお願いします。";
+  const PHONE = "０９０－００００－５６７８";
+
+  it("全角と半角が混ざる断片で、半角がすべて半角幅（等幅）なら、文字の位置を正確に求める", () => {
+    const index = buildPageIndex(0, [item(CONTACT, 44, 700, 10.5, 40.5 * 10.5)], STYLES, m, size);
+    const [match] = findAll(index.search, normalizeQuery(PHONE));
+    const [rect] = rangeRects(index, match!.rawStart, match!.rawEnd, false);
+    expect(rect!.x).toBeCloseTo(44 + 18 * 10.5, 6);
+    expect(rect!.width).toBeCloseTo(13 * 10.5, 6);
+  });
+
+  it("等幅でない断片では、全角を 1 字分として半角の幅を断片の幅から求め、半角の数に応じた余裕をとる", () => {
+    const index = buildPageIndex(0, [item(CONTACT, 44, 700, 10.5, 41 * 10.5)], STYLES, m, size);
+    const [match] = findAll(index.search, normalizeQuery(PHONE));
+    const [rect] = rangeRects(index, match!.rawStart, match!.rawEnd, false);
+    expect(rect!.x).toBeCloseTo(44 + (18.7 - 0.06) * 10.5, 6);
+    expect(rect!.x + rect!.width).toBeCloseTo(44 + (18.7 + 13 + 0.06) * 10.5, 6);
+  });
+
+  it("半角の文字の間にある位置ほど、大きな余裕をとる", () => {
+    const chars = [..."TEL 090-0000-1234 FAX 03-0000-0000"];
+    const spans = layoutItem(chars, 20.4);
+    expect(spans[4]!.slackBefore * 20.4).toBeCloseTo(0.06 * 4, 9);
+    expect(spans[16]!.slackAfter * 20.4).toBeCloseTo(0.06 * 17, 9);
+    expect(spans[0]!.slackBefore).toBe(0);
+    expect(spans[33]!.slackAfter).toBe(0);
+    expect(layoutItem([..."abc"], 1.5).every((span) => span.slackBefore === 0 && span.slackAfter === 0)).toBe(true);
+  });
+
+  it("半角の幅が見込みから大きく外れる断片では、補正を一定の範囲にとどめる", () => {
+    const spans = layoutItem([..."見本 abc"], 100);
+    const width = (k: number): number => spans[k]!.end - spans[k]!.start;
+    expect(width(1) / width(0)).toBeCloseTo(1, 9);
+    expect(width(3) / width(0)).toBeCloseTo(0.55 * 1.5, 9);
+    expect(width(2) / width(0)).toBeCloseTo(0.3 * 1.5, 9);
   });
 
   it("回転したページでも、候補の矩形が文字の位置に来る", () => {

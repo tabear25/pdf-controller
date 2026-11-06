@@ -1,4 +1,5 @@
-import { searchDrafts, sourceLabel, type Candidate } from "../core/candidates";
+import { searchDrafts, sourceLabel, type Candidate, type CandidateDraft } from "../core/candidates";
+import { DETECTORS, detectDrafts, type DetectorId } from "../core/detectors";
 import type { EditorStore } from "../core/editor";
 import { normalizeQuery } from "../core/normalize";
 import { formatPageList } from "../core/redactions";
@@ -21,8 +22,12 @@ export class CandidatePanel {
   private readonly list: HTMLElement;
   private readonly applyAll: HTMLButtonElement;
   private readonly skipAll: HTMLButtonElement;
+  private readonly detectorBoxes = new Map<DetectorId, HTMLInputElement>();
+  private readonly detectRun: HTMLButtonElement;
+  private readonly detectStatus: HTMLElement;
   private text: TextIndexes | null = null;
   private autoFilled = true;
+  private autoDetected = false;
 
   constructor(private readonly store: EditorStore, private readonly host: CandidatePanelHost) {
     this.input = h("input", {
@@ -37,6 +42,23 @@ export class CandidatePanel {
     this.applyAll = h("button", { className: "button small", text: "すべて塗る", attrs: { type: "button", "data-testid": "apply-all-candidates" } });
     this.skipAll = h("button", { className: "button small", text: "すべて塗らない", attrs: { type: "button", "data-testid": "skip-all-candidates" } });
     this.list = h("ul", { className: "candidate-list", attrs: { "data-testid": "candidate-list" } });
+    const options = DETECTORS.map((d) => {
+      const box = h("input", { attrs: { type: "checkbox", "data-testid": `detector-${d.id}` } });
+      box.checked = d.defaultEnabled;
+      this.detectorBoxes.set(d.id, box);
+      return h("label", { className: "detector-option" }, box, ` ${d.label}`);
+    });
+    this.detectRun = h("button", { className: "button small", text: "この設定で探す", attrs: { type: "button", "data-testid": "detect-run" } });
+    this.detectStatus = h("p", { className: "note", attrs: { "data-testid": "detect-status", "aria-live": "polite" } });
+    const detectors = h(
+      "div",
+      { className: "detectors" },
+      h("p", { className: "panel-subtitle", text: "自動で見つける候補" }),
+      h("p", { className: "note", text: "開いたときに、メールアドレス、電話番号、郵便番号、URL、年齢を自動で探します。日付・年号は候補が多くなるので、必要なときだけ選んでください。" }),
+      h("div", { className: "detector-options" }, ...options),
+      this.detectRun,
+      this.detectStatus,
+    );
     this.element = h(
       "section",
       { className: "panel-section", attrs: { "data-testid": "candidate-panel" } },
@@ -46,6 +68,7 @@ export class CandidatePanel {
       h("p", { className: "note", text: "全角と半角、空白の有無、英字の大文字と小文字、ひらがなとカタカナ、ハイフンの種類の違いは区別しません。" }),
       this.availability,
       this.status,
+      detectors,
       this.count,
       h("div", { className: "button-row" }, this.applyAll, this.skipAll),
       this.list,
@@ -57,6 +80,7 @@ export class CandidatePanel {
     this.input.addEventListener("input", () => {
       this.autoFilled = false;
     });
+    this.detectRun.addEventListener("click", () => this.runDetection(false));
     this.applyAll.addEventListener("click", () => this.decideAll("apply"));
     this.skipAll.addEventListener("click", () => this.decideAll("skip"));
     store.subscribe(() => this.render());
@@ -68,6 +92,8 @@ export class CandidatePanel {
     const usable = text?.indexes.some((i) => i?.hasText) ?? false;
     this.input.disabled = !usable;
     this.runButton.disabled = !usable;
+    this.detectRun.disabled = !usable;
+    for (const box of this.detectorBoxes.values()) box.disabled = !usable;
     if (loading) {
       setText(this.availability, "文字の情報を読み取っています…");
     } else if (!text) {
@@ -83,9 +109,35 @@ export class CandidatePanel {
     if (!text) {
       this.input.value = "";
       this.autoFilled = true;
+      this.autoDetected = false;
       setText(this.status, "");
+      setText(this.detectStatus, "");
+    } else if (usable && !this.autoDetected) {
+      this.autoDetected = true;
+      this.runDetection(true);
     }
     this.render();
+  }
+
+  private runDetection(seed: boolean): void {
+    if (!this.text) return;
+    const enabled = new Set<DetectorId>([...this.detectorBoxes].filter(([, box]) => box.checked).map(([id]) => id));
+    if (enabled.size === 0) {
+      setText(this.detectStatus, "探す種類を 1 つ以上選んでください。");
+      return;
+    }
+    const drafts = detectDrafts(this.text.indexes, enabled);
+    const result = seed ? this.store.seedCandidates(drafts) : this.store.addCandidates(drafts);
+    const counts = new Map<string, number>();
+    for (const d of drafts as CandidateDraft[]) {
+      const label = sourceLabel(d.source);
+      counts.set(label, (counts.get(label) ?? 0) + 1);
+    }
+    const found = [...counts].map(([label, n]) => `${label} ${n} 件`).join("、");
+    const parts = [found ? `${found}を見つけました。` : "該当するものは見つかりませんでした。"];
+    if (result.added > 0) parts.push(`${result.added} 件を未確認の候補に加えました。`);
+    if (result.covered > 0) parts.push(`すでに塗る範囲に含まれている ${result.covered} 件は除きました。`);
+    setText(this.detectStatus, parts.join(""));
   }
 
   suggest(text: string): void {
