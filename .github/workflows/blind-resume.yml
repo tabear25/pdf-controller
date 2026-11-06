@@ -1,0 +1,104 @@
+name: blind-resume
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "blind-resume/**"
+      - ".github/workflows/blind-resume.yml"
+  pull_request:
+    paths:
+      - "blind-resume/**"
+      - ".github/workflows/blind-resume.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blind-resume-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: blind-resume
+
+jobs:
+  linux:
+    name: Linux / Chromium（ビルド、単体、E2E）
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: poppler と日本語フォント
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils fonts-ipafont-gothic
+      - run: npm ci
+      - run: python -m pip install -r tests/requirements.txt
+      - run: npm run build
+      - name: コミットした成果物がビルド結果と一致するか
+        run: git diff --exit-code -- dist vercel.json
+      - run: npm test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+        env:
+          CI: "1"
+          PYTHON: python
+          REQUIRE_INDEPENDENT_CHECKS: "1"
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-linux
+          path: blind-resume/test-results
+          retention-days: 7
+
+  windows:
+    name: Windows / ${{ matrix.channel }}（E2E、コミットした dist を使用）
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        channel: [chrome, msedge]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run test:e2e
+        env:
+          CI: "1"
+          PW_CHANNEL: ${{ matrix.channel }}
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-windows-${{ matrix.channel }}
+          path: blind-resume/test-results
+          retention-days: 7
+
+  macos:
+    name: macOS / chrome（E2E、コミットした dist を使用）
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run test:e2e
+        env:
+          CI: "1"
+          PW_CHANNEL: chrome
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-macos
+          path: blind-resume/test-results
+          retention-days: 7
