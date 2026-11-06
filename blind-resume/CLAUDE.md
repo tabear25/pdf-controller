@@ -7,6 +7,7 @@
 - `docs/requirements.md`：依頼文（判断の基準）
 - `docs/plan.md`、`docs/decisions.md`：計画と決定事項
 - `docs/design.md`、`docs/security.md`：設計と安全性の判断
+- `docs/report.md`：最終報告（できたこと、テストの結果、既知の限界、依頼から変えた点、残っている課題）
 
 ## 作業のルール
 

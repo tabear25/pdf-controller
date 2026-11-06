@@ -52,7 +52,11 @@ async function redactTargets(page, name, ids) {
 
 async function exportReview(page) {
   await page.getByTestId("export").click();
-  await page.getByTestId("export-start").click();
+  const pending = page.getByTestId("pending-dialog");
+  const start = page.getByTestId("export-start");
+  await pending.or(start).waitFor();
+  if (await pending.isVisible()) await page.getByTestId("pending-skip").click();
+  await start.click();
   await page.getByTestId("review").waitFor({ timeout: 120000 });
   await page.locator('.preview-row[data-rendered="true"]').first().waitFor();
   await page.getByTestId("confirm").check();
@@ -69,6 +73,53 @@ async function textReady(page) {
 }
 
 const scenes = {
+  m5: [
+    {
+      file: "m5-01-auto-detect.png",
+      run: async (page) => {
+        await openFixture(page, "01_embedded_resume.pdf");
+        await textReady(page);
+        await page.getByTestId("detect-status").filter({ hasText: "見つけました" }).waitFor();
+      },
+    },
+    {
+      file: "m5-02-zoom.png",
+      run: async (page) => {
+        await openFixture(page, "01_embedded_resume.pdf");
+        await textReady(page);
+        await page.getByTestId("skip-all-candidates").click();
+        await page.getByTestId("zoom-in").click();
+        await page.getByTestId("zoom-in").click();
+        await page.locator('.page[data-page-index="0"][data-state="rendered"]').waitFor();
+      },
+    },
+    {
+      file: "m5-03-page-excluded.png",
+      run: async (page) => {
+        await openFixture(page, "01_embedded_resume.pdf");
+        await textReady(page);
+        await page.getByTestId("skip-all-candidates").click();
+        await page.getByTestId("include-page-1").uncheck();
+        await page.evaluate(() => {
+          const second = document.querySelector('.page[data-page-index="1"]');
+          const viewer = document.querySelector(".viewer");
+          viewer.scrollTop += second.getBoundingClientRect().top - viewer.getBoundingClientRect().top - 260;
+        });
+        await page.locator('.page[data-page-index="1"][data-state="rendered"]').waitFor();
+      },
+    },
+    {
+      file: "m5-04-review-excluded.png",
+      run: async (page) => {
+        await openFixture(page, "01_embedded_resume.pdf");
+        await textReady(page);
+        await page.getByTestId("detect-status").filter({ hasText: "見つけました" }).waitFor();
+        await page.getByTestId("apply-all-candidates").click();
+        await page.getByTestId("include-page-1").uncheck();
+        await exportReview(page);
+      },
+    },
+  ],
   m4: [
     {
       file: "m4-01-candidates.png",

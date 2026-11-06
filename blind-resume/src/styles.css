@@ -262,9 +262,9 @@ body {
 
 .page-label {
   position: absolute;
-  right: 0;
-  bottom: -18px;
-  font-size: 11px;
+  left: 0;
+  top: -24px;
+  font-size: 12px;
   color: var(--muted);
 }
 

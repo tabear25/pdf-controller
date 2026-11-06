@@ -18,7 +18,7 @@ export class PageControls {
         box = h("input", { attrs: { type: "checkbox", "data-testid": `include-page-${index}`, "aria-label": `${index + 1} ページを書き出す` } });
         const input = box;
         input.addEventListener("change", () => this.store.setExcluded(index, !input.checked));
-        const control = h("label", { className: "page-toggle" }, input, " 書き出す");
+        const control = h("label", { className: "page-toggle" }, input, " このページを書き出す");
         control.addEventListener("pointerdown", (event) => event.stopPropagation());
         view.root.append(control);
         this.toggles.set(view.root, input);
