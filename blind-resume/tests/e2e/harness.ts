@@ -333,10 +333,19 @@ export async function openExportSettings(page: Page): Promise<void> {
   await expect(settings).toBeVisible();
 }
 
-export async function clearDetectedCandidates(page: Page): Promise<void> {
+export async function setAutoDetection(page: Page, ids: readonly string[] | "none"): Promise<void> {
+  for (const box of await page.locator('input[data-testid^="detector-"]').all()) {
+    const id = ((await box.getAttribute("data-testid")) ?? "").replace("detector-", "");
+    await box.setChecked(ids !== "none" && ids.includes(id));
+  }
+}
+
+export async function openWithoutDetection(page: Page, name: string): Promise<void> {
+  await setAutoDetection(page, "none");
+  await openFixture(page, name);
+}
+
+export async function waitForDetection(page: Page): Promise<void> {
   await waitForText(page);
   await expect(page.getByTestId("detect-status")).not.toHaveText("");
-  const skipAll = page.getByTestId("skip-all-candidates");
-  if (await skipAll.isEnabled()) await skipAll.click();
-  await expect(page.getByTestId("candidate")).toHaveCount(0);
 }

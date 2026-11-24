@@ -781,6 +781,15 @@ body {
   font-size: 13px;
 }
 
+.detector-notes {
+  margin: 4px 0;
+  padding-left: 18px;
+}
+
+.detector-notes li {
+  margin: 2px 0;
+}
+
 .usage-section summary {
   cursor: pointer;
 }

@@ -48,6 +48,7 @@ export interface PageTextIndex {
   readonly frames: readonly (ItemFrame | null)[];
   readonly search: Normalized;
   readonly loose: Normalized;
+  readonly plain: Normalized;
   readonly toDisplay: Matrix;
   readonly size: Size;
   readonly hasText: boolean;
@@ -128,27 +129,37 @@ export function buildPageIndex(
 ): PageTextIndex {
   const units: string[] = [];
   const refs: (CharRef | null)[] = [];
-  const frames: (ItemFrame | null)[] = [];
-  let hasText = false;
-  items.forEach((item, index) => {
+  const frames: (ItemFrame | null)[] = items.map((item) => {
     const style = styles[item.fontName] ?? {};
     const metrics: FontMetrics = {
       ascent: style.ascent ?? DEFAULT_METRICS.ascent,
       descent: style.descent ?? DEFAULT_METRICS.descent,
       vertical: style.vertical ?? false,
     };
-    const frame = frameOf(item, metrics);
-    frames.push(frame);
+    return frameOf(item, metrics);
+  });
+  let hasText = false;
+  let lineFrame: ItemFrame | null = null;
+  items.forEach((item, index) => {
+    const frame = frames[index] ?? null;
     const chars = [...item.str];
+    if (chars.length === 0) {
+      if (item.hasEOL) lineFrame = null;
+      return;
+    }
+    if (units.length > 0) units.push(lineFrame && frame && sameLine(lineFrame, frame) ? " " : "\n");
+    if (units.length > 0) refs.push(null);
     const spans = layoutItem(chars, frame ? frame.length / frame.fontSize : Number.NaN);
     chars.forEach((ch, k) => {
       units.push(ch);
       refs.push(frame ? { item: index, ...spans[k]! } : null);
       if (ch.trim().length > 0) hasText = true;
     });
-    units.push("\n");
-    refs.push(null);
+    if (frame) lineFrame = frame;
+    if (item.hasEOL) lineFrame = null;
   });
+  units.push("\n");
+  refs.push(null);
   return {
     page,
     units,
@@ -156,10 +167,21 @@ export function buildPageIndex(
     frames,
     search: normalizeUnits(units),
     loose: normalizeUnits(units, { keepSpaces: true }),
+    plain: normalizeUnits(units, { keepSpaces: true, keepLineBreaks: true, preserveCase: true, preserveKana: true }),
     toDisplay,
     size,
     hasText,
   };
+}
+
+function sameLine(a: ItemFrame, b: ItemFrame): boolean {
+  if (Math.abs(a.along[0] * b.along[0] + a.along[1] * b.along[1] - 1) > 0.02) return false;
+  const dx = b.origin[0] - a.origin[0];
+  const dy = b.origin[1] - a.origin[1];
+  const across = dx * a.across[0] + dy * a.across[1];
+  const along = dx * a.along[0] + dy * a.along[1];
+  const size = Math.max(a.fontSize, b.fontSize);
+  return Math.abs(across) <= 0.5 * size && along >= -0.5 * size;
 }
 
 function segmentRect(frame: ItemFrame, from: number, to: number, toDisplay: Matrix): Rect {

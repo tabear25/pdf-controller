@@ -1,13 +1,22 @@
 import { draftFromMatch, type CandidateDraft } from "./candidates";
-import type { PageTextIndex, RawMatch } from "./text-index";
+import { findAddresses, findOrganizations, findSchools, findStations, organizationCore, type TextRange } from "./entities";
+import { normalizeQuery, type Normalized } from "./normalize";
+import { findPersonFields } from "./person";
+import { romajiNamePattern } from "./romaji";
+import { findAll, type PageTextIndex, type RawMatch } from "./text-index";
 
-export type DetectorId = "email" | "phone" | "postal" | "url" | "age" | "date";
+export type PatternId = "email" | "phone" | "postal" | "url" | "age" | "date";
+export type DetectorId = "person" | "organization" | "school" | "address" | PatternId;
+
+export interface DetectorMatch extends RawMatch {
+  readonly page: number;
+}
 
 export interface Detector {
   readonly id: DetectorId;
   readonly label: string;
   readonly defaultEnabled: boolean;
-  readonly find: (text: string) => readonly [number, number][];
+  readonly detect: (indexes: readonly PageTextIndex[]) => DetectorMatch[];
 }
 
 function scan(text: string, pattern: RegExp, accept?: (m: RegExpExecArray) => boolean): [number, number][] {
@@ -95,43 +104,156 @@ function findPhones(text: string): [number, number][] {
   return out;
 }
 
-export const DETECTORS: readonly Detector[] = [
-  { id: "email", label: "メールアドレス", defaultEnabled: true, find: (t) => scan(t, EMAIL) },
-  { id: "phone", label: "電話番号", defaultEnabled: true, find: (t) => findPhones(t) },
-  { id: "postal", label: "郵便番号", defaultEnabled: true, find: (t) => scan(t, POSTAL) },
-  {
-    id: "url",
-    label: "URL",
-    defaultEnabled: true,
-    find: (t) => dropContained([...scan(t, URL_WITH_SCHEME), ...scan(t, URL_BARE_PATH)]),
-  },
-  { id: "age", label: "年齢", defaultEnabled: true, find: (t) => scan(t, AGE) },
-  { id: "date", label: "日付・年号", defaultEnabled: false, find: (t) => scan(t, DATE) },
-];
+export const PATTERNS: Readonly<Record<PatternId, (text: string) => [number, number][]>> = {
+  email: (t) => scan(t, EMAIL),
+  phone: (t) => findPhones(t),
+  postal: (t) => scan(t, POSTAL),
+  url: (t) => dropContained([...scan(t, URL_WITH_SCHEME), ...scan(t, URL_BARE_PATH)]),
+  age: (t) => scan(t, AGE),
+  date: (t) => scan(t, DATE),
+};
 
 function trimRange(text: string, [start, end]: readonly [number, number]): [number, number] {
   let s = start;
   let e = end;
-  while (s < e && text[s] === " ") s++;
-  while (e > s && /[ .,、。]/.test(text[e - 1]!)) e--;
+  while (s < e && /\s/.test(text[s]!)) s++;
+  while (e > s && /[\s.,、。]/.test(text[e - 1]!)) e--;
   return [s, e];
 }
 
-export function detectDrafts(indexes: readonly (PageTextIndex | null)[], enabled: ReadonlySet<DetectorId>): CandidateDraft[] {
-  const drafts: CandidateDraft[] = [];
+function toMatch(page: number, view: Normalized, range: readonly [number, number]): DetectorMatch | null {
+  const [s, e] = trimRange(view.text, range);
+  if (e <= s) return null;
+  return { page, rawStart: view.starts[s]!, rawEnd: view.ends[e - 1]! };
+}
+
+function viewMatches(indexes: readonly PageTextIndex[], view: "loose" | "plain", find: (text: string) => readonly (readonly [number, number])[]): DetectorMatch[] {
+  const out: DetectorMatch[] = [];
   for (const index of indexes) {
-    if (!index) continue;
-    const text = index.loose.text;
-    for (const detector of DETECTORS) {
-      if (!enabled.has(detector.id)) continue;
-      for (const range of detector.find(text)) {
-        const [s, e] = trimRange(text, range);
-        if (e <= s) continue;
-        const match: RawMatch = { rawStart: index.loose.starts[s]!, rawEnd: index.loose.ends[e - 1]! };
-        const draft = draftFromMatch(index, match, { kind: "detector", detector: detector.id, label: detector.label });
-        if (draft) drafts.push(draft);
-      }
+    for (const range of find(index[view].text)) {
+      const match = toMatch(index.page, index[view], range);
+      if (match) out.push(match);
     }
+  }
+  return out;
+}
+
+function searchMatches(indexes: readonly PageTextIndex[], term: string): DetectorMatch[] {
+  const needle = normalizeQuery(term);
+  if ([...needle].length < 2) return [];
+  return indexes.flatMap((index) => findAll(index.search, needle).map((m) => ({ page: index.page, ...m })));
+}
+
+function regexMatches(indexes: readonly PageTextIndex[], source: string): DetectorMatch[] {
+  const out: DetectorMatch[] = [];
+  for (const index of indexes) {
+    for (const m of index.loose.text.matchAll(new RegExp(source, "gu"))) {
+      const start = m.index ?? 0;
+      const match = toMatch(index.page, index.loose, [start, start + m[0].length]);
+      if (match) out.push(match);
+    }
+  }
+  return out;
+}
+
+function ranges(found: readonly TextRange[]): [number, number][] {
+  return found.map((r) => [r.start, r.end]);
+}
+
+function detectPersons(indexes: readonly PageTextIndex[]): DetectorMatch[] {
+  const terms = new Set<string>();
+  const patterns = new Set<string>();
+  for (const index of indexes) {
+    const fields = findPersonFields(index.plain.text);
+    for (const name of fields.names) {
+      terms.add(name.tokens.join(""));
+      if (!name.japanese) terms.add([...name.tokens].reverse().join(""));
+      if (name.japanese && name.tokens.length >= 2 && [...name.tokens[0]!].length >= 2) terms.add(name.tokens[0]!);
+    }
+    for (const kana of fields.kanas) {
+      terms.add(kana.replace(/ /g, ""));
+      const pattern = romajiNamePattern(kana);
+      if (pattern) patterns.add(pattern);
+    }
+  }
+  return [...[...terms].flatMap((term) => searchMatches(indexes, term)), ...[...patterns].flatMap((source) => regexMatches(indexes, source))];
+}
+
+function latinCorePattern(core: string): string {
+  const body = core
+    .toLowerCase()
+    .split(/\s+/)
+    .map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("\\s?");
+  return `(?<![a-z0-9])${body}(?![a-z0-9])`;
+}
+
+function detectOrganizations(indexes: readonly PageTextIndex[]): DetectorMatch[] {
+  const direct: DetectorMatch[] = [];
+  const cores = new Set<string>();
+  for (const index of indexes) {
+    for (const found of findOrganizations(index.plain.text)) {
+      const match = toMatch(index.page, index.plain, [found.start, found.end]);
+      if (match) direct.push(match);
+      const core = organizationCore(found.core);
+      if (core) cores.add(core);
+    }
+  }
+  const spread = [...cores].flatMap((core) => (/^[A-Za-z0-9 &'.-]+$/.test(core) ? (core.replace(/[^A-Za-z]/g, "").length >= 3 ? regexMatches(indexes, latinCorePattern(core)) : []) : searchMatches(indexes, core)));
+  return [...direct, ...spread];
+}
+
+export const DETECTORS: readonly Detector[] = [
+  { id: "person", label: "氏名・ふりがな", defaultEnabled: true, detect: detectPersons },
+  { id: "organization", label: "会社・団体名", defaultEnabled: true, detect: detectOrganizations },
+  { id: "school", label: "学校名", defaultEnabled: true, detect: (ix) => viewMatches(ix, "plain", (t) => ranges(findSchools(t))) },
+  { id: "address", label: "住所・最寄り駅", defaultEnabled: true, detect: (ix) => viewMatches(ix, "plain", (t) => [...ranges(findAddresses(t)), ...ranges(findStations(t))]) },
+  { id: "email", label: "メールアドレス", defaultEnabled: true, detect: (ix) => viewMatches(ix, "loose", PATTERNS.email) },
+  { id: "phone", label: "電話番号", defaultEnabled: true, detect: (ix) => viewMatches(ix, "loose", PATTERNS.phone) },
+  { id: "postal", label: "郵便番号", defaultEnabled: true, detect: (ix) => viewMatches(ix, "loose", PATTERNS.postal) },
+  { id: "url", label: "URL", defaultEnabled: true, detect: (ix) => viewMatches(ix, "loose", PATTERNS.url) },
+  { id: "age", label: "年齢", defaultEnabled: true, detect: (ix) => viewMatches(ix, "loose", PATTERNS.age) },
+  { id: "date", label: "日付・年号", defaultEnabled: false, detect: (ix) => viewMatches(ix, "loose", PATTERNS.date) },
+];
+
+interface Found {
+  readonly detector: Detector;
+  readonly match: DetectorMatch;
+  readonly order: number;
+}
+
+function keepOutermost(found: readonly Found[]): Found[] {
+  const byPage = new Map<number, Found[]>();
+  for (const f of found) {
+    const list = byPage.get(f.match.page) ?? [];
+    list.push(f);
+    byPage.set(f.match.page, list);
+  }
+  const kept: Found[] = [];
+  for (const list of byPage.values()) {
+    for (const f of list) {
+      const { rawStart: s, rawEnd: e } = f.match;
+      const inside = list.some((g) => g !== f && g.match.rawStart <= s && e <= g.match.rawEnd && (g.match.rawEnd - g.match.rawStart > e - s || g.order < f.order));
+      if (!inside) kept.push(f);
+    }
+  }
+  return kept.sort((a, b) => a.match.page - b.match.page || a.match.rawStart - b.match.rawStart);
+}
+
+export function detectDrafts(indexes: readonly (PageTextIndex | null)[], enabled: ReadonlySet<DetectorId>): CandidateDraft[] {
+  const usable = indexes.filter((index): index is PageTextIndex => index !== null);
+  const byPage = new Map(usable.map((index) => [index.page, index]));
+  const found: Found[] = [];
+  for (const detector of DETECTORS) {
+    if (!enabled.has(detector.id)) continue;
+    for (const match of detector.detect(usable)) found.push({ detector, match, order: found.length });
+  }
+  const drafts: CandidateDraft[] = [];
+  for (const { detector, match } of keepOutermost(found)) {
+    const index = byPage.get(match.page);
+    if (!index) continue;
+    const draft = draftFromMatch(index, match, { kind: "detector", detector: detector.id, label: detector.label });
+    if (draft) drafts.push(draft);
   }
   return drafts;
 }
