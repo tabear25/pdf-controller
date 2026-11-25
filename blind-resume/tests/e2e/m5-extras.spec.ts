@@ -9,9 +9,10 @@ import {
   manifest,
   openFixture,
   redactionData,
+  setAutoDetection,
   test,
   waitForAllPagesRendered,
-  waitForText,
+  waitForDetection,
 } from "./harness";
 
 function targetBox(name: string, pageIndex: number, id: string) {
@@ -19,24 +20,43 @@ function targetBox(name: string, pageIndex: number, id: string) {
   return boxToDisplay(page, page.targets.find((t) => t.id === id)!.bbox);
 }
 
-test("開いたときに、メール・電話・郵便番号・URL・年齢を自動で候補にする（日付は既定では探さない）", async ({ app }) => {
+test("開いたときに、氏名・会社名・学校名・住所・連絡先などを自動で候補にする（日付は既定では探さない）", async ({ app }) => {
   const name = "01_embedded_resume.pdf";
   await openFixture(app, name);
   await waitForAllPagesRendered(app, 2);
-  await waitForText(app);
+  await waitForDetection(app);
   const status = app.getByTestId("detect-status");
-  for (const label of ["メールアドレス", "電話番号", "郵便番号", "URL", "年齢"]) await expect(status).toContainText(label);
+  for (const label of ["氏名・ふりがな", "会社・団体名", "学校名", "住所・最寄り駅", "メールアドレス", "電話番号", "URL", "年齢"]) await expect(status).toContainText(label);
   await expect(status).not.toContainText("日付");
   const texts = await app.locator('[data-testid="candidate"] .candidate-text').allTextContents();
-  for (const expected of ["taro.mihon@example.com", "090-0000-1234", "〒000-0001", "https://example.com/mihon-taro", "満35歳", "０９０－００００－５６７８"]) {
+  for (const expected of [
+    "見本 太郎",
+    "みほん たろう",
+    "見本太郎",
+    "Taro Mihon",
+    "株式会社見本商事",
+    "見本高等学校",
+    "見本大学",
+    "〒000-0001 東京都見本区見本町1-2-3",
+    "見本線 見本駅",
+    "taro.mihon@example.com",
+    "090-0000-1234",
+    "０９０－００００－５６７８",
+    "https://example.com/mihon-taro",
+    "満35歳",
+  ]) {
     expect(texts, `候補に「${expected}」がある`).toContain(expected);
   }
   expect(texts.some((t) => t.includes("1990年4月1日"))).toBe(false);
   await expect(app.getByTestId("undo")).toBeDisabled();
   const rects = await candidateRects(app);
-  for (const [pageIndex, id] of [[0, "p1-email"], [0, "p1-phone"], [0, "p1-url"], [1, "p2-pr-phone-fullwidth"]] as const) {
-    expect(coversBox(rects, pageIndex, targetBox(name, pageIndex, id)), `${id} を候補の矩形が覆う`).toBe(true);
-  }
+  const notDetectable = ["p1-birth", "p1-gender", "p1-photo"];
+  manifest.fixtures[name]!.pages.forEach((page, pageIndex) => {
+    for (const target of page.targets) {
+      if (notDetectable.includes(target.id)) continue;
+      expect(coversBox(rects, pageIndex, targetBox(name, pageIndex, target.id)), `${target.id} を候補の矩形が覆う`).toBe(true);
+    }
+  });
   await app.getByTestId("detector-date").check();
   await app.getByTestId("detect-run").click();
   await expect(status).toContainText("日付・年号");
@@ -44,6 +64,36 @@ test("開いたときに、メール・電話・郵便番号・URL・年齢を�
   expect(withDates.some((t) => t.includes("1990年4月1日"))).toBe(true);
   await app.getByTestId("undo").click();
   await expect(app.locator('[data-testid="candidate"] .candidate-text', { hasText: "1990年4月1日" })).toHaveCount(0);
+});
+
+test("自動で探す種類は、PDF を開く前に選べる", async ({ app }) => {
+  await setAutoDetection(app, ["email", "phone"]);
+  await openFixture(app, "01_embedded_resume.pdf");
+  await waitForAllPagesRendered(app, 2);
+  await waitForDetection(app);
+  await expect(app.getByTestId("detect-status")).not.toContainText("氏名");
+  const metas = await app.locator('[data-testid="candidate"] .candidate-meta').allTextContents();
+  expect(metas.length).toBeGreaterThan(0);
+  expect(metas.every((meta) => meta.includes("メールアドレス") || meta.includes("電話番号")), metas.join("\n")).toBe(true);
+});
+
+test("均等割り付けや字間の空いた氏名、1 文字ずつのフリガナも自動で候補にする", async ({ app }) => {
+  const spaced = "03_spaced_name.pdf";
+  await openFixture(app, spaced);
+  await waitForAllPagesRendered(app, 1);
+  await waitForDetection(app);
+  const rects = await candidateRects(app);
+  for (const id of ["spaced-name", "charspace-name", "ideographic-space-name", "spaced-katakana", "halfwidth-katakana"]) {
+    expect(coversBox(rects, 0, targetBox(spaced, 0, id)), `${id} を候補の矩形が覆う`).toBe(true);
+  }
+});
+
+test("「Name:」欄の英語表記と、「住所：」欄の値も自動で候補にする", async ({ app }) => {
+  await openFixture(app, "02_nonembedded.pdf");
+  await waitForAllPagesRendered(app, 1);
+  await waitForDetection(app);
+  const texts = await app.locator('[data-testid="candidate"] .candidate-text').allTextContents();
+  for (const expected of ["見本 太郎", "みほん たろう", "Taro Mihon", "〒000-0001 東京都見本区見本町1-2-3"]) expect(texts, `候補に「${expected}」がある`).toContain(expected);
 });
 
 test("拡大、縮小、幅に合わせるで表示を変えても、範囲の座標は変わらない", async ({ app }) => {

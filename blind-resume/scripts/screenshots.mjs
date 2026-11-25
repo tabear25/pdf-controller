@@ -73,6 +73,34 @@ async function textReady(page) {
 }
 
 const scenes = {
+  m6: [
+    {
+      file: "m6-01-proper-nouns-page1.png",
+      run: async (page) => {
+        await openFixture(page, "01_embedded_resume.pdf");
+        await textReady(page);
+        await page.getByTestId("detect-status").filter({ hasText: "見つけました" }).waitFor();
+      },
+    },
+    {
+      file: "m6-02-proper-nouns-page2.png",
+      run: async (page) => {
+        await openFixture(page, "01_embedded_resume.pdf");
+        await textReady(page);
+        await page.getByTestId("detect-status").filter({ hasText: "見つけました" }).waitFor();
+        await page.evaluate(() => {
+          const second = document.querySelector('.page[data-page-index="1"]');
+          const viewer = document.querySelector(".viewer");
+          viewer.scrollTop += second.getBoundingClientRect().top - viewer.getBoundingClientRect().top - 40;
+        });
+        await page.locator('.page[data-page-index="1"][data-state="rendered"]').waitFor();
+        await page.locator(".side-panel").evaluate((panel) => {
+          const list = panel.querySelector('[data-testid="candidate-list"]');
+          panel.scrollTop = list.offsetTop - 120;
+        });
+      },
+    },
+  ],
   m5: [
     {
       file: "m5-01-auto-detect.png",

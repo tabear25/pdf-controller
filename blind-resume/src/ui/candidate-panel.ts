@@ -54,7 +54,16 @@ export class CandidatePanel {
       "div",
       { className: "detectors" },
       h("p", { className: "panel-subtitle", text: "自動で見つける候補" }),
-      h("p", { className: "note", text: "開いたときに、メールアドレス、電話番号、郵便番号、URL、年齢を自動で探します。日付・年号は候補が多くなるので、必要なときだけ選んでください。" }),
+      h("p", { className: "note", text: "開いたときに、チェックの入っている種類を自動で探して、未確認の候補にします。種類は PDF を開く前にも選べます。" }),
+      h(
+        "ul",
+        { className: "note detector-notes" },
+        h("li", { text: "氏名・ふりがな：「氏名」「ふりがな」欄の値を読み取り、文書全体で同じ文字列（ローマ字表記を含む）を探します。" }),
+        h("li", { text: "会社・団体名：「株式会社」「(株)」「Inc.」などの前後の名前と、文書の中の同じ名前を探します。" }),
+        h("li", { text: "学校名：「大学」「高等学校」などの前の名前を探します。" }),
+        h("li", { text: "住所・最寄り駅：都道府県名から始まる住所、「住所」「最寄り駅」欄の値、「〜駅」を探します。" }),
+        h("li", { text: "決まった書き方をしていないもの（欄の名前がない氏名、社名だけの会社名など）は見つかりません。日付・年号は候補が多くなるので、必要なときだけ選んでください。" }),
+      ),
       h("div", { className: "detector-options" }, ...options),
       this.detectRun,
       this.detectStatus,
@@ -93,7 +102,6 @@ export class CandidatePanel {
     this.input.disabled = !usable;
     this.runButton.disabled = !usable;
     this.detectRun.disabled = !usable;
-    for (const box of this.detectorBoxes.values()) box.disabled = !usable;
     if (loading) {
       setText(this.availability, "文字の情報を読み取っています…");
     } else if (!text) {
@@ -123,7 +131,7 @@ export class CandidatePanel {
     if (!this.text) return;
     const enabled = new Set<DetectorId>([...this.detectorBoxes].filter(([, box]) => box.checked).map(([id]) => id));
     if (enabled.size === 0) {
-      setText(this.detectStatus, "探す種類を 1 つ以上選んでください。");
+      setText(this.detectStatus, seed ? "自動で探す種類が選ばれていないため、探していません。" : "探す種類を 1 つ以上選んでください。");
       return;
     }
     const drafts = detectDrafts(this.text.indexes, enabled);

@@ -6,6 +6,14 @@ export interface Normalized {
 
 export interface NormalizeOptions {
   readonly keepSpaces?: boolean;
+  readonly keepLineBreaks?: boolean;
+  readonly preserveCase?: boolean;
+  readonly preserveKana?: boolean;
+}
+
+export interface FoldOptions {
+  readonly preserveCase?: boolean;
+  readonly preserveKana?: boolean;
 }
 
 const COMBINING = /^\p{M}/u;
@@ -19,12 +27,12 @@ export function isContinuation(ch: string): boolean {
   return n.length > 0 && COMBINING.test(n);
 }
 
-export function foldCluster(cluster: string): string {
-  return cluster
-    .normalize("NFKC")
-    .toLowerCase()
-    .replace(KATAKANA, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0x60))
-    .replace(DASHES, "-");
+export function foldCluster(cluster: string, options: FoldOptions = {}): string {
+  let text = cluster.normalize("NFKC");
+  if (!options.preserveCase) text = text.toLowerCase();
+  if (!options.preserveKana) text = text.replace(KATAKANA, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0x60)).replace(DASHES, "-");
+  else text = text.replace(DASHES, (ch) => (ch === "ー" ? ch : "-"));
+  return text;
 }
 
 interface Cluster {
@@ -56,13 +64,16 @@ export function normalizeUnits(units: readonly string[], options: NormalizeOptio
   const ends: number[] = [];
   let lastWasSpace = true;
   for (const cluster of clustersOf(units)) {
-    for (const ch of foldCluster(cluster.text)) {
+    for (const ch of foldCluster(cluster.text, options)) {
       if (SPACE.test(ch)) {
+        const mark = options.keepLineBreaks && ch === "\n" ? "\n" : " ";
         if (options.keepSpaces && !lastWasSpace) {
-          text += " ";
+          text += mark;
           starts.push(cluster.start);
           ends.push(cluster.end);
           lastWasSpace = true;
+        } else if (options.keepSpaces && mark === "\n" && text.endsWith(" ")) {
+          text = `${text.slice(0, -1)}\n`;
         }
         continue;
       }

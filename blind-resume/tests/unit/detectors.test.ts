@@ -1,13 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { DETECTORS, detectDrafts, type DetectorId } from "../../src/core/detectors";
+import { DETECTORS, detectDrafts, PATTERNS, type DetectorId, type PatternId } from "../../src/core/detectors";
 import { displayTransform } from "../../src/core/geometry";
 import { normalizeUnits } from "../../src/core/normalize";
 import { buildPageIndex } from "../../src/core/text-index";
 
-function find(id: DetectorId, raw: string): string[] {
-  const detector = DETECTORS.find((d) => d.id === id)!;
+function find(id: PatternId, raw: string): string[] {
   const text = normalizeUnits([...raw], { keepSpaces: true }).text;
-  return detector.find(text).map(([s, e]) => text.slice(s, e));
+  return PATTERNS[id](text).map(([s, e]) => text.slice(s, e));
 }
 
 describe("正規表現による検出", () => {
